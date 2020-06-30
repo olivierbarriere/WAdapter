@@ -142,6 +142,7 @@ public:
 				[this](const WiFiEventStationModeGotIP &event) {
 					wlog->notice(F("WiFi: Station connected, IP: %s"), this->getDeviceIp().toString().c_str());
 					this->connectFailCounter=0;
+					startMDNS();
 					//Connect, if webThing supported and Wifi is connected as client
 					this->notify(true);
 				});
@@ -467,34 +468,38 @@ true ||
 				std::bind(&WNetwork::handleHttpFirmwareUpdateFinished, this),
 				std::bind(&WNetwork::handleHttpFirmwareUpdateProgress, this));
 
-#ifndef MINIMAL
-		//WebThings
-		if (this->isSupportingWebThing()) {
-			//Make the thing discoverable
-			//String mdnsName = getHostName() + ".local";
-			String mdnsName = this->getDeviceIp().toString();
-			if (MDNS.begin(mdnsName)) {
-				MDNS.addService("http", "tcp", 80);
-				MDNS.addServiceTxt("http", "tcp", "url", "http://" + mdnsName + "/things");
-				MDNS.addServiceTxt("http", "tcp", "webthing", "true");
-				wlog->notice(F("MDNS responder started at %s"), mdnsName.c_str());
-			}
-			webServer->on("/things", HTTP_GET, std::bind(&WNetwork::sendDevicesStructure, this));
-			webServer->on("/things/", HTTP_GET, std::bind(&WNetwork::sendDevicesStructure, this));
-			WDevice *device = this->firstDevice;
-			while (device != nullptr) {
-				bindWebServerCallsNetwork(device);
-				device = device->next;
-			}
-		}
-#endif
-
-		//Start http server
 		wlog->notice(F("webServer prepared."));
 
 		webServer->begin();
 		this->notify(false);
 		return;
+	}
+
+	void startMDNS(){
+		#ifndef MINIMAL
+				//WebThings
+				if (this->isSupportingWebThing()) {
+					//Make the thing discoverable
+					//String mdnsName = getHostName() + ".local";
+					String mdnsName = this->getDeviceIp().toString();
+					wlog->notice(F("MDNS init, name: %s"), mdnsName.c_str());
+					MDNS.end();
+					if (MDNS.begin(mdnsName)) {
+						wlog->notice(F("MDNS OK"));
+						MDNS.addService("http", "tcp", 80);
+						MDNS.addServiceTxt("http", "tcp", "url", "http://" + mdnsName + "/things");
+						MDNS.addServiceTxt("http", "tcp", "webthing", "true");
+						wlog->notice(F("MDNS responder started at %s"), mdnsName.c_str());
+					}
+					webServer->on("/things", HTTP_GET, std::bind(&WNetwork::sendDevicesStructure, this));
+					webServer->on("/things/", HTTP_GET, std::bind(&WNetwork::sendDevicesStructure, this));
+					WDevice *device = this->firstDevice;
+					while (device != nullptr) {
+						bindWebServerCallsNetwork(device);
+						device = device->next;
+					}
+				}
+		#endif
 	}
 
 	void stopWebServer() {
