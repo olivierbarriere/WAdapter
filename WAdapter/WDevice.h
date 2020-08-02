@@ -21,6 +21,7 @@ const char* DEVICE_TYPE_TEMPERATURE_SENSOR = "TemperatureSensor";
 const char* DEVICE_TYPE_THERMOSTAT = "Thermostat";
 const char* DEVICE_TYPE_LOG = "Log";
 const char* DEVICE_TYPE_TEXT_DISPLAY = "TextDisplay";
+const char* DEVICE_TYPE_NETWORK = "Network";
 
 class WNetwork;
 

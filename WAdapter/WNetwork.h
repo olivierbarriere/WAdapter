@@ -158,9 +158,6 @@ public:
 					}
 				});
 
-
-
-
 		
 		wlog->notice(F("firmware: %s"), firmwareVersion.c_str());
 
@@ -422,8 +419,10 @@ true ||
 		//if ((WiFi.status() != WL_CONNECTED) || (!this->isSupportingWebThing())) {
 		webServer->on("/", HTTP_GET, std::bind(&WNetwork::handleHttpRootRequest, this));
 		webServer->on("/config", HTTP_GET, std::bind(&WNetwork::handleHttpRootRequest, this));
+		// Android Captive Portal Detection
 		webServer->on("/generate_204", HTTP_GET, std::bind(&WNetwork::handleHttpRootRequest, this));
-		//webServer->on("/generate_204", HTTP_GET, std::bind(&WNetwork::handleCaptivePortal, this));
+		// Apple Captive Portal Detection
+		webServer->on("/hotspot-detect.html", HTTP_GET, std::bind(&WNetwork::handleHttpRootRequest, this));
 
 		WDevice *device = this->firstDevice;
 		while (device != nullptr) {
@@ -1094,43 +1093,61 @@ private:
 			page->print("<tr><th>Chip ID:</th><td>");
 			page->print(ESP.getChipId());
 			page->print("</td></tr>");
+
 			page->print("<tr><th>Flash Chip ID:</th><td>");
 			page->print(ESP.getFlashChipId());
 			page->print("</td></tr>");
+
 			page->print("<tr><th>IDE Flash Size:</th><td>");
 			page->print(ESP.getFlashChipSize());
 			page->print("</td></tr>");
+
 			page->print("<tr><th>Real Flash Size:</th><td>");
 			page->print(ESP.getFlashChipRealSize());
 			page->print("</td></tr>");
+
 			page->print("<tr><th>IP address:</th><td>");
 			page->print(this->getDeviceIp().toString());
 			page->print("</td></tr>");
+
 			page->print("<tr><th>MAC address:</th><td>");
 			page->print(WiFi.macAddress());
 			page->print("</td></tr>");
+
+			page->print("<tr><th>Current WiFi RSSI:</th><td>");
+			page->print(WiFi.RSSI());
+			page->print(" dBm");
+			page->print("</td></tr>");
+
 			page->print("<tr><th>Flash Chip size:</th><td>");
 			page->print(ESP.getFlashChipSize());
 			page->print(" kByte");
+			page->print("</td></tr>");
+
 			page->print("<tr><th>Current sketch size:</th><td>");
 			page->print(ESP.getSketchSize());
 			page->print(" kByte");
 			page->print("</td></tr>");
+
 			page->print("<tr><th>Available sketch size:</th><td>");
 			page->print(ESP.getFreeSketchSpace());
 			page->print(" kByte");
+			page->print("</td></tr>");
+
 			page->print("<tr><th>Free heap size:</th><td>");
 			page->print(ESP.getFreeHeap());
 			page->print(" kByte");
 			page->print("</td></tr>");
+
 			page->print("<tr><th>Largest free heap block:</th><td>");
 			page->print(ESP.getMaxFreeBlockSize());
 			page->print(" kByte");
 			page->print("</td></tr>");
+
 			page->print("<tr><th>Heap fragmentation:</th><td>");
 			page->print(ESP.getHeapFragmentation());
 			page->print(" %</td></tr>");
-			page->print("</td></tr>");
+			
 			page->print("<tr><th>Uptime:</th><td>");
 			unsigned long secs=millis()/1000;
 			unsigned int days = secs / (60 * 60 * 24);
@@ -1142,6 +1159,7 @@ private:
 			page->printf_P("%dd, %dh, %dm, %ds",
 			days, hours, minutes, secs);
 			page->print("</td></tr>");
+
 			page->print("</table>");			
 			page->print(FPSTR(HTTP_HOME_BUTTON));
 			page->webserverSendAndFlush(webServer);
