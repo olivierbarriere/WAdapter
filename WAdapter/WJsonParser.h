@@ -501,7 +501,7 @@ private:
 		if (currentKey != "") {
 			buffer[bufferPos] = '\0';
 			//String value = String(buffer);
-			if (strcmp(buffer, "true") == 0) {
+			if (strcasecmp(buffer, "true") == 0) {
 				result = processKeyValue(currentKey.c_str(), "true");
 			}
 		}
@@ -515,7 +515,7 @@ private:
 		if (currentKey != "") {
 			buffer[bufferPos] = '\0';
 			//String value = String(buffer);
-			if (strcmp(buffer, "false") == 0) {
+			if (strcasecmp(buffer, "false") == 0) {
 				result = processKeyValue(currentKey.c_str(), "false");
 			}
 		}

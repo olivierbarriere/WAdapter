@@ -124,7 +124,7 @@ public:
 		if ((!isReadOnly()) && (value != nullptr)) {
 			switch (getType()) {
 			case BOOLEAN: {
-				setBoolean(value.equals("true"));
+				setBoolean(value.equalsIgnoreCase("true"));
 				return true;
 			}
 			case DOUBLE: {
