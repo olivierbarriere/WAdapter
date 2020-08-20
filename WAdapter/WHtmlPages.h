@@ -149,7 +149,7 @@ const static char HTTP_PAGE_CONFIGURATION_OPTION[]    PROGMEM = R"=====(
 	</div>
 )=====";
 
-const static char HTTP_PAGE_CONFIIGURATION_OPTION_MQTTHASS[] PROGMEM = "Support Autodisovery for Home Assistant using MQTT<br> (currently only for heating thermostat)";
+const static char HTTP_PAGE_CONFIIGURATION_OPTION_MQTTHASS[] PROGMEM = "Support Autodiscovery for Home Assistant using MQTT<br>";
 const static char HTTP_PAGE_CONFIIGURATION_OPTION_MQTT[] PROGMEM = "Support MQTT";
 const static char HTTP_PAGE_CONFIIGURATION_OPTION_APFALLBACK[] PROGMEM = "Enable Fallback to AP-Mode if WiFi Connection gets lost";
 const static char HTTP_PAGE_CONFIIGURATION_OPTION_MQTTSINGLEVALUES[] PROGMEM = "Send all values also as single values via MQTT";
