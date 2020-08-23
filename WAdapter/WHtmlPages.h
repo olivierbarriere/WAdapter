@@ -15,7 +15,7 @@ const static char HTTP_HEAD_BEGIN[]         PROGMEM = R"=====(<!DOCTYPE html>
 	<head>
 		<meta charset="utf-8" />
 		<meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'/>
-		<title>%s</title>
+		<title>%s - %s</title>
 )=====";
 
 const static char HTTP_STYLE[]              PROGMEM = R"=====(<style>

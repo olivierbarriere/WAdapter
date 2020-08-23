@@ -249,6 +249,12 @@ public:
 		return this->mqttSendChangedValues;
 	}
 
+	virtual bool hasInfoPage() {
+		return false;
+	}
+	virtual void printInfoPage(WStringStream* page) {
+	}
+
     WDevice* next = nullptr;
     //WebSocketsServer* webSocket;
 	WProperty* firstProperty = nullptr;

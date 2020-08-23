@@ -23,8 +23,8 @@
 #include "WJsonParser.h"
 #include "WLog.h"
 
-#define SIZE_MQTT_PACKET 2048
-#define SIZE_JSON_PACKET 3096
+#define SIZE_MQTT_PACKET 1536
+#define SIZE_JSON_PACKET 2048
 #define NO_LED -1
 const char* CONFIG_PASSWORD = "12345678";
 const char* APPLICATION_JSON = "application/json";
@@ -917,8 +917,8 @@ private:
 		wlog->notice(F("handleHttpRootRequest"));
 		if (isWebServerRunning()) {
 			if (restartFlag.equals("")) {
-				httpHeader(applicationName.c_str());
-				WStringStream* page = new WStringStream(2*1024);
+				httpHeader("Main");
+				WStringStream* page = new WStringStream(1*1024);
 				printHttpCaption(page);
 				WDevice *device = firstDevice;
 				page->printAndReplace(FPSTR(HTTP_BUTTON), "wifi", "get", "Configure network");
@@ -948,7 +948,7 @@ private:
 				httpFooter();
 			} else {
 				httpHeader("Info", F("<meta http-equiv=\"refresh\" content=\"10\">"));
-				WStringStream* page = new WStringStream(2048);
+				WStringStream* page = new WStringStream(1024);
 				page->print(restartFlag);
 				page->print("<br><br>");
 				page->print("Module will reset in a few seconds...");
@@ -1090,6 +1090,10 @@ private:
 			WStringStream* page = new WStringStream(1024);
 			printHttpCaption(page);
 			page->print("<table>");
+			// header
+			page->print("<tr><th colspan=\"2\"><h4>Main</h4></th></tr>");
+
+
 			page->print("<tr><th>Chip ID:</th><td>");
 			page->print(ESP.getChipId());
 			page->print("</td></tr>");
@@ -1160,7 +1164,21 @@ private:
 			days, hours, minutes, secs);
 			page->print("</td></tr>");
 
-			page->print("</table>");			
+			page->webserverSendAndFlush(webServer);
+
+			WDevice *device = this->firstDevice;
+			while (device != nullptr) {
+				if (device->hasInfoPage()){
+					page->print("<tr><th colspan=\"2\"><h4>");
+					page->print(device->getId());
+					page->print("</h4></th></tr>");
+					device->printInfoPage(page);
+					page->webserverSendAndFlush(webServer);
+				}
+				device = device->next;
+			}
+			page->print("</table>");	
+			page->print("<br/><br/>");			
 			page->print(FPSTR(HTTP_HOME_BUTTON));
 			page->webserverSendAndFlush(webServer);
 			delete page;
@@ -1195,7 +1213,7 @@ private:
 		webServer->setContentLength(CONTENT_LENGTH_UNKNOWN);
 		webServer->send(200, TEXT_HTML, "");
 		WStringStream* page = new WStringStream(1*1024);
-		page->printf(FPSTR(HTTP_HEAD_BEGIN), title);
+		page->printf(FPSTR(HTTP_HEAD_BEGIN), getIdx(), title);
 		page->webserverSendAndFlush(webServer);
 		delete page;
 		webServer->sendContent_P(HTTP_SCRIPT);
