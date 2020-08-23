@@ -2,6 +2,7 @@
 #define WEB_THING_HTML_PAGES_H
 
 #include "Arduino.h"
+#include "WStringStream.h"
 
 const char* HTTP_SELECTED = "selected";
 const char* HTTP_CHECKED = "checked";
@@ -237,6 +238,19 @@ const static char HTTP_CONFIG_SAVE_BUTTON[]         PROGMEM = R"=====(
 </form>
 )=====";
 
+void htmlTableRowTitle(WStringStream* page,  char const* title){
+	page->print("<tr><th>");
+	page->print(title);
+	page->print("</th><td>");
+}
+void htmlTableRowTitle(WStringStream* page,  const __FlashStringHelper * title){
+	page->print("<tr><th>");
+	page->print(title);
+	page->print("</th><td>");
+}
 
+void htmlTableRowEnd(WStringStream* page){
+	page->print("</td></tr>");
+}
 
 #endif

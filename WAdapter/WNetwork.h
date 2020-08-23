@@ -1094,65 +1094,65 @@ private:
 			page->print("<tr><th colspan=\"2\"><h4>Main</h4></th></tr>");
 
 
-			page->print("<tr><th>Chip ID:</th><td>");
+			htmlTableRowTitle(page, F("Chip ID:"));
 			page->print(ESP.getChipId());
-			page->print("</td></tr>");
+			htmlTableRowEnd(page);
 
-			page->print("<tr><th>Flash Chip ID:</th><td>");
+			htmlTableRowTitle(page, F("Flash Chip ID:"));
 			page->print(ESP.getFlashChipId());
-			page->print("</td></tr>");
+			htmlTableRowEnd(page);
 
-			page->print("<tr><th>IDE Flash Size:</th><td>");
+			htmlTableRowTitle(page, F("IDE Flash Size:"));
 			page->print(ESP.getFlashChipSize());
-			page->print("</td></tr>");
+			htmlTableRowEnd(page);
 
-			page->print("<tr><th>Real Flash Size:</th><td>");
+			htmlTableRowTitle(page, F("Real Flash Size:"));
 			page->print(ESP.getFlashChipRealSize());
-			page->print("</td></tr>");
+			htmlTableRowEnd(page);
 
-			page->print("<tr><th>IP address:</th><td>");
+			htmlTableRowTitle(page, F("IP address:"));
 			page->print(this->getDeviceIp().toString());
-			page->print("</td></tr>");
+			htmlTableRowEnd(page);
 
-			page->print("<tr><th>MAC address:</th><td>");
+			htmlTableRowTitle(page, F("MAC address:"));
 			page->print(WiFi.macAddress());
-			page->print("</td></tr>");
+			htmlTableRowEnd(page);
 
-			page->print("<tr><th>Current WiFi RSSI:</th><td>");
+			htmlTableRowTitle(page, F("Current WiFi RSSI:"));
 			page->print(WiFi.RSSI());
 			page->print(" dBm");
-			page->print("</td></tr>");
+			htmlTableRowEnd(page);
 
-			page->print("<tr><th>Flash Chip size:</th><td>");
+			htmlTableRowTitle(page, F("Flash Chip size:"));
 			page->print(ESP.getFlashChipSize());
 			page->print(" kByte");
-			page->print("</td></tr>");
+			htmlTableRowEnd(page);
 
-			page->print("<tr><th>Current sketch size:</th><td>");
+			htmlTableRowTitle(page, F("Current sketch size:"));
 			page->print(ESP.getSketchSize());
 			page->print(" kByte");
-			page->print("</td></tr>");
+			htmlTableRowEnd(page);
 
-			page->print("<tr><th>Available sketch size:</th><td>");
+			htmlTableRowTitle(page, F("Available sketch size:"));
 			page->print(ESP.getFreeSketchSpace());
 			page->print(" kByte");
-			page->print("</td></tr>");
+			htmlTableRowEnd(page);
 
-			page->print("<tr><th>Free heap size:</th><td>");
+			htmlTableRowTitle(page, F("Free heap size:"));
 			page->print(ESP.getFreeHeap());
 			page->print(" kByte");
-			page->print("</td></tr>");
+			htmlTableRowEnd(page);
 
-			page->print("<tr><th>Largest free heap block:</th><td>");
+			htmlTableRowTitle(page, F("Largest free heap block:"));
 			page->print(ESP.getMaxFreeBlockSize());
 			page->print(" kByte");
-			page->print("</td></tr>");
+			htmlTableRowEnd(page);
 
-			page->print("<tr><th>Heap fragmentation:</th><td>");
+			htmlTableRowTitle(page, F("Heap fragmentation:"));
 			page->print(ESP.getHeapFragmentation());
 			page->print(" %</td></tr>");
 			
-			page->print("<tr><th>Uptime:</th><td>");
+			htmlTableRowTitle(page, F("Uptime:"));
 			unsigned long secs=millis()/1000;
 			unsigned int days = secs / (60 * 60 * 24);
 			secs -= days * (60 * 60 * 24);
