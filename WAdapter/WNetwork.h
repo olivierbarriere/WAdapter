@@ -1170,7 +1170,7 @@ private:
 			while (device != nullptr) {
 				if (device->hasInfoPage()){
 					page->print("<tr><th colspan=\"2\"><h4>");
-					page->print(device->getId());
+					page->print(device->getName());
 					page->print("</h4></th></tr>");
 					device->printInfoPage(page);
 					page->webserverSendAndFlush(webServer);
@@ -1552,7 +1552,7 @@ private:
 		property->toJsonValue(&json);
 		json.endObject();
 		property->setRequested(true);
-		wlog->notice(F("getPropertyValue %s"), response->c_str());
+		wlog->trace(F("getPropertyValue %s"), response->c_str());
 		webServer->send(200, APPLICATION_JSON, response->c_str());
 
 	}
