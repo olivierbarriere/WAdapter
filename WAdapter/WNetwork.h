@@ -75,6 +75,7 @@ class WNetwork {
 public:
 	typedef std::function<void(void)> THandlerFunction;
 	typedef std::function<bool(void)> THandlerReturnFunction;
+	typedef std::function<bool(bool)> THandlerReturnFunctionBool;
 	WNetwork(bool debug, String applicationName, String firmwareVersion,
 			int statusLedPin, byte appSettingsFlag) {
 
@@ -118,7 +119,7 @@ public:
 		this->apStartedAt = 0;
 		this->lastLoopLog = 0;
 #ifndef MINIMAL
-		this->lastMqttHASS = 0;
+		this->lastMqttHassAutodiscoverySent = 0;
 		this->mqttClient = nullptr;
 #endif
 		//this->webSocket = nullptr;
@@ -309,10 +310,8 @@ true ||
 			delay(2000);
 		}
 #ifndef MINIMAL
-		if (isSupportingMqtt() && isSupportingMqttHASS() && isMqttConnected() && isStation() && onMqttHassAutodiscover && 
-			(lastMqttHASS==0)){
-				if (onMqttHassAutodiscover() ) lastMqttHASS=now;
-
+		if (lastMqttHassAutodiscoverySent==0){
+				if (sendMqttHassAutodiscover(false) ) lastMqttHassAutodiscoverySent=now;
 		}
 #endif
 		if (WiFi.status() != lastWifiStatus){
@@ -347,7 +346,13 @@ true ||
 	}
 
 #ifndef MINIMAL
-	void setOnMqttHassAutodiscover(THandlerReturnFunction onMqttHassAutodiscover) {
+	bool sendMqttHassAutodiscover(bool removeDiscovery){
+		if (isSupportingMqtt() && isSupportingMqttHASS() && isMqttConnected() && isStation() && onMqttHassAutodiscover){
+			return onMqttHassAutodiscover(removeDiscovery);
+		}
+	}
+
+	void setOnMqttHassAutodiscover(THandlerReturnFunctionBool onMqttHassAutodiscover) {
 		this->onMqttHassAutodiscover = onMqttHassAutodiscover;
 	}
 
@@ -692,7 +697,7 @@ private:
 	WLog* wlog;
 	THandlerFunction onNotify;
 	THandlerFunction onConfigurationFinished;
-	THandlerReturnFunction onMqttHassAutodiscover;
+	THandlerReturnFunctionBool onMqttHassAutodiscover;
 	bool debug, updateRunning;
 	String restartFlag;
 	DNSServer *dnsApServer;
@@ -711,7 +716,7 @@ private:
 #ifndef MINIMAL
 	WAdapterMqtt *mqttClient;
 	long lastMqttConnect;
-	unsigned long lastMqttHASS;
+	unsigned long lastMqttHassAutodiscoverySent;
 #endif
 	WProperty *ssid;
 	WProperty *idx;
@@ -921,7 +926,7 @@ private:
 				WStringStream* page = new WStringStream(1*1024);
 				printHttpCaption(page);
 				WDevice *device = firstDevice;
-				page->printAndReplace(FPSTR(HTTP_BUTTON), "wifi", "get", "Configure network");
+				page->printAndReplace(FPSTR(HTTP_BUTTON), "wifi", "get", "Configure Network");
 				page->webserverSendAndFlush(webServer);
 				while (device != nullptr) {
 					if (device->isProvidingConfigPage()) {
@@ -1045,6 +1050,11 @@ private:
 
 	void handleHttpSaveConfiguration() {
 		if (isWebServerRunning()) {
+#ifndef MINIMAL
+			// remove old autoconfiguration
+			sendMqttHassAutodiscover(true);
+#endif			
+
 			this->idx->setString(webServer->arg("i").c_str());
 			this->ssid->setString(webServer->arg("s").c_str());
 			settings->setString("password",  (webServer->arg("p").equals(FORM_PW_NOCHANGE) ? getPassword() : webServer->arg("p").c_str())) ;
