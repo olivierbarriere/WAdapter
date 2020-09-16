@@ -1,7 +1,6 @@
 #ifndef W_DEVICE_H
 #define W_DEVICE_H
 
-#include "ESP8266WebServer.h"
 #include "WProperty.h"
 #include "WLevelProperty.h"
 #include "WOnOffProperty.h"
@@ -166,15 +165,15 @@ public:
     	return configNeedsReboot;
     }
 
-    virtual void printConfigPage(WStringStream* page) {
+    virtual void printConfigPage(AsyncWebServerRequest *request, AsyncResponseStream* page) {
 
     }
 
-    virtual void saveConfigPage(ESP8266WebServer* webServer) {
+    virtual void saveConfigPage(AsyncWebServerRequest *request) {
 
     }
 
-    virtual void bindWebServerCalls(ESP8266WebServer* webServer) {
+    virtual void bindWebServerCalls(AsyncWebServerRequest *request, AsyncResponseStream* page) {
 
     }
 
@@ -252,7 +251,7 @@ public:
 	virtual bool hasInfoPage() {
 		return false;
 	}
-	virtual void printInfoPage(WStringStream* page) {
+	virtual void printInfoPage(AsyncResponseStream* page) {
 	}
 
     WDevice* next = nullptr;

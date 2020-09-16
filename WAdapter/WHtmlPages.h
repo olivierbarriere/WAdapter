@@ -23,35 +23,27 @@ const static char HTTP_STYLE[]              PROGMEM = R"=====(<style>
 body{
 	text-align: center;
 	font-family: arial, sans-serif;
-} 
-
-#bodyDiv{  
-  display:inline-block;
-  min-width:300px;
-  text-align:left;
 }
-
+#bodyDiv{  
+	display:inline-block;
+	min-width:300px;
+	text-align:left;
+}
 div{
 	background-color:white;
-  color:black;
+	color:black;
 	border:1.0rem
 	border-color:black;
-  border-radius:0.3rem;
+	border-radius:0.3rem;
 	background-size: 1em;
 	padding:5px;
 	text-align:left;
-} 
-
-input[type='text'] {
-  width: 100%;
 }
-
-input[type='password'] {
-  width: 100%;
-}
-
-select{
-	width:100%;
+input[type='text'],
+input[type='password'],
+select,
+button{
+	width: 300px;
 }
 
 button{
@@ -61,12 +53,11 @@ button{
 	color:#fff;
 	line-height:2.4rem;
 	font-size:1.2rem;
-	width:100%;
 }
-.settingstable th {
+.settingstable th{
 	font-weight: bold;
 }
-.settingstable th, .settingstable td {
+.settingstable th, .settingstable td{
 	border: 1px solid black;
 }
 .settingstable input[type='text']{
@@ -106,18 +97,18 @@ const static char HTTP_BODY_END[]           PROGMEM = R"=====(
 
 const static char HTTP_BUTTON[]    PROGMEM = R"=====(
 	<div>
-        <form action='/%s' method='%s'>
-        	<button>%s</button>
-        </form>
-    </div>
+		<form action='/%s' method='%s'>
+			<button>%s</button>
+		</form>
+	</div>
 )=====";
 
 
 const static char HTTP_PAGE_CONFIGURATION_STYLE[]    PROGMEM = R"=====(
 <style>
 #mqttGroup {
-  border: 1px solid gray;
-  display:%s;
+	border: 1px solid gray;
+	display:%s;
 }
 </style>
 )=====";
@@ -131,12 +122,12 @@ const static char HTTP_PAGE_CONFIGURATION_MQTT_END[]    PROGMEM = R"=====(
 	<script>
 		function hideMqttGroup() {
 			var cb = eb('mqttEnabled'); 
-  			var x = eb('mqttGroup');
-  			if (cb.checked) {
-	    		x.style.display = 'block';
-  			} else {
-    			x.style.display = 'none';
-  			}
+			var x = eb('mqttGroup');
+			if (cb.checked) {
+				x.style.display = 'block';
+			} else {
+				x.style.display = 'none';
+			}
 		}
 	</script>
 )=====";
@@ -175,11 +166,11 @@ const static char HTTP_HOME_BUTTON[]              PROGMEM = R"=====(
 const static char HTTP_FORM_FIRMWARE[] PROGMEM = R"=====(
 <form method='POST' action='' enctype='multipart/form-data'>
 	<div>
-    	<input type='file' accept='.bin' name='update'>
-    </div>
-    <div>
+		<input type='file' accept='.bin' name='update'>
+	</div>
+	<div>
 		<button type='submit'>Update firmware</button>
-    </div>
+	</div>
 </form>
 )=====";
 
@@ -219,16 +210,16 @@ const static char HTTP_CHECKBOX_OPTION[]    PROGMEM = R"=====(
 )=====";
 
 const static char HTTP_COMBOBOX_BEGIN[]         PROGMEM = R"=====(
-        <div>
+		<div>
 			%s<br>
-        	<select name='%s'>
+			<select name='%s'>
 )=====";
 const static char HTTP_COMBOBOX_ITEM[]         PROGMEM = R"=====(        		
 				<option value='%s' %s>%s</option>                  
 )=====";
 const static char HTTP_COMBOBOX_END[]         PROGMEM = R"=====(					
 			</select>
-        </div>
+		</div>
 )=====";
 
 const static char HTTP_CONFIG_SAVE_BUTTON[]         PROGMEM = R"=====(	
@@ -238,18 +229,18 @@ const static char HTTP_CONFIG_SAVE_BUTTON[]         PROGMEM = R"=====(
 </form>
 )=====";
 
-void htmlTableRowTitle(WStringStream* page,  char const* title){
+void htmlTableRowTitle(AsyncResponseStream* page,  char const* title){
 	page->print("<tr><th>");
 	page->print(title);
 	page->print("</th><td>");
 }
-void htmlTableRowTitle(WStringStream* page,  const __FlashStringHelper * title){
+void htmlTableRowTitle(AsyncResponseStream* page,  const __FlashStringHelper * title){
 	page->print("<tr><th>");
 	page->print(title);
 	page->print("</th><td>");
 }
 
-void htmlTableRowEnd(WStringStream* page){
+void htmlTableRowEnd(AsyncResponseStream* page){
 	page->print("</td></tr>");
 }
 

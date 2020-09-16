@@ -28,10 +28,10 @@ public:
     
     }
 
-    virtual void printConfigPage(WStringStream* page) {
+    virtual void printConfigPage(AsyncWebServerRequest *request, AsyncResponseStream* page) {
 
     }
-    void saveConfigPage(ESP8266WebServer* webServer) {
+    void saveConfigPage(AsyncWebServerRequest* request) {
 
     }
 

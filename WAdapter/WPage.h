@@ -2,7 +2,6 @@
 #define W_PAGE_H
 
 #include <Arduino.h>
-#include "ESP8266WebServer.h"
 #include "WStringStream.h"
 
 
@@ -22,21 +21,21 @@ public:
 		delete this->id;
 		delete this->title;
 	}
-    typedef std::function<void(ESP8266WebServer*, WStringStream*)> TCommandPage;
+    typedef std::function<void(AsyncWebServerRequest*, AsyncResponseStream*)> TCommandPage;
 
-    virtual void printPage(ESP8266WebServer* webServer, WStringStream* page) {
-        if (onPrintPage) onPrintPage(webServer, page);
+    virtual void printPage(AsyncWebServerRequest *request, AsyncResponseStream* page) {
+        if (onPrintPage) onPrintPage(request, page);
     }
 
-    virtual void submittedPage(ESP8266WebServer* webServer, WStringStream* page) {
-        if (onSubmittedPage) onSubmittedPage(webServer, page);
+    virtual void submittedPage(AsyncWebServerRequest *request, AsyncResponseStream* page) {
+        if (onSubmittedPage) onSubmittedPage(request, page);
     }
 
     void setPrintPage(TCommandPage onPrintPage) {
         this->onPrintPage = onPrintPage;
     }
 
-    void setSubmittedPage(TCommandPage onSubmittedPage) {
+    void setSubmittedPage(TCommandPage onPrintPage) {
         this->onSubmittedPage = onSubmittedPage;
     }
 

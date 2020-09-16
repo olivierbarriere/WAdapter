@@ -56,8 +56,8 @@ public:
     }
 
 
-	virtual void webserverSendAndFlush(ESP8266WebServer *webServer) {
-		webServer->sendContent(this->c_str());
+	virtual void webserverSendAndFlush(AsyncResponseStream *stream) {
+		stream->print(this->c_str());
 		this->flush();
 	}
 

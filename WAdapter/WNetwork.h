@@ -3,7 +3,9 @@
 
 #include <Arduino.h>
 #include <WiFiClient.h>
-#include <ESP8266WebServer.h>
+#include <ESP8266WiFi.h>
+#include <ESPAsyncTCP.h>
+#include <ESPAsyncWebServer.h>
 #ifdef ESP8266
 #include <ESP8266mDNS.h>
 #else
@@ -252,10 +254,6 @@ true ||
 			if (isSoftAP()) {
 				dnsApServer->processNextRequest();
 			}
-			webServer->handleClient();
-			/*if (webSocket != nullptr) {
-				webSocket->loop();
-			}*/
 			result = ((!isSoftAP()) && (!isUpdateRunning()));
 		}
 		if (!isSoftAP()){
@@ -282,7 +280,7 @@ true ||
 			if ((this->isMqttConnected()) && (this->isSupportingMqtt())
 					&& ((device->lastStateNotify == 0)
 							|| ((device->stateNotifyInterval > 0) && (now > device->lastStateNotify) &&
-							    (now - device->lastStateNotify > device->stateNotifyInterval)))
+								(now - device->lastStateNotify > device->stateNotifyInterval)))
 					&& (device->isDeviceStateComplete())) {
 				wlog->notice(F("Notify interval is up -> Device state changed..."));
 				handleDeviceStateChange(device);
@@ -418,16 +416,26 @@ true ||
 			statusLed = nullptr;
 		}
 
-		this->webServer = new ESP8266WebServer(80);
+		this->webServer = new AsyncWebServer(80);
 
-		webServer->onNotFound(std::bind(&WNetwork::handleUnknown, this));
+		webServer->onNotFound([this](AsyncWebServerRequest *request){
+			handleUnknown(request);
+		});
 		//if ((WiFi.status() != WL_CONNECTED) || (!this->isSupportingWebThing())) {
-		webServer->on("/", HTTP_GET, std::bind(&WNetwork::handleHttpRootRequest, this));
-		webServer->on("/config", HTTP_GET, std::bind(&WNetwork::handleHttpRootRequest, this));
+		webServer->on("/", HTTP_GET, [this](AsyncWebServerRequest *request){
+			handleHttpRootRequest(request);
+		});
+		webServer->on("/config", HTTP_GET, [this](AsyncWebServerRequest *request){
+			handleHttpRootRequest(request);
+		});
 		// Android Captive Portal Detection
-		webServer->on("/generate_204", HTTP_GET, std::bind(&WNetwork::handleHttpRootRequest, this));
+		webServer->on("/generate_204",  [this](AsyncWebServerRequest *request){
+			handleHttpRootRequest(request);
+		});
 		// Apple Captive Portal Detection
-		webServer->on("/hotspot-detect.html", HTTP_GET, std::bind(&WNetwork::handleHttpRootRequest, this));
+		webServer->on("/hotspot-detect.html", [this](AsyncWebServerRequest *request){
+			handleHttpRootRequest(request);
+		});
 
 		WDevice *device = this->firstDevice;
 		while (device != nullptr) {
@@ -436,8 +444,12 @@ true ||
 			String deviceConfiguration("/saveConfiguration");
 			deviceConfiguration.concat(device->getId());
 			if (device->isProvidingConfigPage()) {
-				webServer->on(did, HTTP_GET, std::bind(&WNetwork::handleHttpDeviceConfiguration, this, device));
-				webServer->on(deviceConfiguration.c_str(), HTTP_GET, std::bind(&WNetwork::handleHttpSaveDeviceConfiguration, this, device));
+				webServer->on(did.c_str(), HTTP_GET, [this, device](AsyncWebServerRequest *request){
+					handleHttpDeviceConfiguration(request, device);
+				});
+				webServer->on(deviceConfiguration.c_str(), HTTP_GET, [this, device](AsyncWebServerRequest *request){
+					handleHttpSaveDeviceConfiguration(request, device);
+				});
 			}
 			WPage *subpage = device->firstPage;
 			while (subpage != nullptr) {
@@ -450,27 +462,42 @@ true ||
 				deviceConfigurationSub.concat(deviceConfiguration);
 				deviceConfigurationSub.concat("_");
 				deviceConfigurationSub.concat(subpage->getId());
-				webServer->on(didSub, HTTP_GET, std::bind(&WNetwork::handleHttpDevicePage, this, device, subpage));
-				webServer->on(deviceConfigurationSub.c_str(), HTTP_GET, std::bind(&WNetwork::handleHttpDevicePageSubmitted, this, device, subpage));
+				webServer->on(didSub.c_str(), HTTP_GET, [this, device, subpage](AsyncWebServerRequest *request){
+					handleHttpDevicePage(request, device, subpage);
+				});
+				webServer->on(deviceConfigurationSub.c_str(), HTTP_GET, [this, device, subpage](AsyncWebServerRequest *request){
+					handleHttpDevicePageSubmitted(request, device, subpage);
+				});
 				subpage = subpage->next;
 			}
 			device = device->next;
 		}
-		webServer->on("/wifi", HTTP_GET,
-				std::bind(&WNetwork::handleHttpNetworkConfiguration, this));
-		webServer->on("/saveConfiguration", HTTP_GET,
-				std::bind(&WNetwork::handleHttpSaveConfiguration, this));
-		webServer->on("/info", HTTP_GET,
-				std::bind(&WNetwork::handleHttpInfo, this));
-		webServer->on("/reset", HTTP_ANY,
-				std::bind(&WNetwork::handleHttpReset, this));
+		webServer->on("/wifi", HTTP_GET, [this, device](AsyncWebServerRequest *request){
+				handleHttpNetworkConfiguration(request);
+		});
+		webServer->on("/saveConfiguration", HTTP_GET, [this, device](AsyncWebServerRequest *request){
+				handleHttpSaveConfiguration(request);
+		});
+		webServer->on("/info", HTTP_GET, [this, device](AsyncWebServerRequest *request){
+				handleHttpInfo(request);
+		});
+		webServer->on("/reset", HTTP_ANY, [this, device](AsyncWebServerRequest *request){
+				handleHttpReset(request);
+		});
 
 		//firmware update
-		webServer->on("/firmware", HTTP_GET,
-				std::bind(&WNetwork::handleHttpFirmwareUpdate, this));
-		webServer->on("/firmware", HTTP_POST,
-				std::bind(&WNetwork::handleHttpFirmwareUpdateFinished, this),
-				std::bind(&WNetwork::handleHttpFirmwareUpdateProgress, this));
+		webServer->on("/firmware", HTTP_GET, [this, device](AsyncWebServerRequest *request){
+				handleHttpFirmwareUpdate(request);
+		});
+		webServer->on("/firmware", HTTP_POST, [this, device](AsyncWebServerRequest *request){
+				handleHttpFirmwareUpdateFinished(request);
+				handleHttpFirmwareUpdateProgress(request);
+		});
+
+
+		webServer->on("/ws", HTTP_GET, [this, device](AsyncWebServerRequest *request){
+				std::bind(&WNetwork::handleWebSocket, this);
+		});
 
 		wlog->notice(F("webServer prepared."));
 
@@ -511,7 +538,7 @@ true ||
 		if ((isWebServerRunning())) {
 			wlog->notice(F("stopWebServer"));
 			delay(100);
-			webServer->stop();
+			webServer->end();
 			this->notify(false);
 		}
 		deleteDnsApServer();
@@ -691,7 +718,7 @@ true ||
 
 
 private:
-	ESP8266WebServer *webServer;
+	AsyncWebServer *webServer;
 	WDevice *firstDevice = nullptr;
 	WDevice *lastDevice = nullptr;
 	WLog* wlog;
@@ -845,7 +872,7 @@ private:
 			&& (strcmp(getMqttServer(), "") != 0)
 			&& (strcmp(getMqttPort(), "") != 0)) {
 			wlog->notice(F("Connect to MQTT server: %s; user: '%s'; password: '%s'; clientName: '%s'"),
-					   getMqttServer(), getMqttUser(), getMqttPassword(), getClientName(true).c_str());
+					getMqttServer(), getMqttUser(), getMqttPassword(), getClientName(true).c_str());
 			// Attempt to connect
 			this->mqttClient->setServer(getMqttServer(), String(getMqttPort()).toInt());
 			if (mqttClient->connect(getClientName(true).c_str(),
@@ -918,190 +945,174 @@ private:
 		}
 	}
 
-	void handleHttpRootRequest() {
+	void handleHttpRootRequest(AsyncWebServerRequest *request) {
 		wlog->notice(F("handleHttpRootRequest"));
 		if (isWebServerRunning()) {
-			if (restartFlag.equals("")) {
-				httpHeader("Main");
-				WStringStream* page = new WStringStream(1*1024);
+			if (restartFlag.equals("")) {			
+				AsyncResponseStream* page = httpHeader(request, "Main");
 				printHttpCaption(page);
 				WDevice *device = firstDevice;
-				page->printAndReplace(FPSTR(HTTP_BUTTON), "wifi", "get", "Configure Network");
-				page->webserverSendAndFlush(webServer);
+				page->printf_P(HTTP_BUTTON, "wifi", "get", "Configure Network");
 				while (device != nullptr) {
 					if (device->isProvidingConfigPage()) {
 						String s("Configure ");
 						s.concat(device->getName());
-						page->printAndReplace(FPSTR(HTTP_BUTTON), device->getId(), "get", s.c_str());
+						page->printf_P(HTTP_BUTTON, device->getId(), "get", s.c_str());
 						//page->printAndReplace(FPSTR(HTTP_BUTTON_DEVICE), device->getId(), device->getName());
-						page->webserverSendAndFlush(webServer);
 					}
 					WPage *subpage = device->firstPage;
 					while (subpage != nullptr) {
 						String url =(String)device->getId()+"_"+(String)subpage->getId();
-						page->printAndReplace(FPSTR(HTTP_BUTTON), url.c_str() , "get", subpage->getTitle());
-						page->webserverSendAndFlush(webServer);
+						page->printf_P(HTTP_BUTTON, url.c_str() , "get", subpage->getTitle());
+						//page->printf_P(HTTP_BUTTON, "YY", "get", "XX");
+						//Serial.printf("YYY1: %s\n", url.c_str());
+						//Serial.printf("YYY2: %s\n", subpage->getTitle());
 						subpage = subpage->next;
 					}
 					device = device->next;
 				}
-				page->printAndReplace(FPSTR(HTTP_BUTTON), "firmware", "get", "Update firmware");
-				page->printAndReplace(FPSTR(HTTP_BUTTON), "info", "get", "Info");
-				page->printAndReplace(FPSTR(HTTP_BUTTON), "reset", "post", "Reboot");
-				page->webserverSendAndFlush(webServer);
-				delete page;
-				httpFooter();
+				page->printf_P(HTTP_BUTTON, "firmware", "get", "Update firmware");
+				page->printf_P(HTTP_BUTTON, "info", "get", "Info");
+				page->printf_P(HTTP_BUTTON, "reset", "post", "Reboot");
+				httpFooter(page);
+				request->send(page);
+				Serial.println("XXX");
 			} else {
-				httpHeader("Info", F("<meta http-equiv=\"refresh\" content=\"10\">"));
-				WStringStream* page = new WStringStream(1024);
+				AsyncResponseStream* page = httpHeader(request, "Info", F("<meta http-equiv=\"refresh\" content=\"10\">"));
 				page->print(restartFlag);
 				page->print("<br><br>");
 				page->print("Module will reset in a few seconds...");
-				page->webserverSendAndFlush(webServer);
-				delete page;
-				httpFooter();
+				httpFooter(page);
+				request->send(page);
 			}
 		}
 	}
 
-	void handleHttpDeviceConfiguration(WDevice *&device) {
+	void handleHttpDeviceConfiguration(AsyncWebServerRequest *request, WDevice *device) {
 		if (isWebServerRunning()) {
 			wlog->notice(F("Device config page"));
-			httpHeader(F("Device Configuration"));
-			WStringStream* page = new WStringStream(4*1024);
+			AsyncResponseStream* page = httpHeader(request, F("Device Configuration"));
 			printHttpCaption(page);
-			page->webserverSendAndFlush(webServer);
-			device->printConfigPage(page);
-			page->webserverSendAndFlush(webServer);
-			delete page;
-			httpFooter();
-		}
+			device->printConfigPage(request, page);
+			httpFooter(page);
+			request->send(page);
+					}
 
 	}
-	void handleHttpDevicePage(WDevice *&device, WPage *&subpage) {
+	void handleHttpDevicePage(AsyncWebServerRequest *request, WDevice *device, WPage *subpage) {
 		if (isWebServerRunning()) {
 			wlog->notice(F("Device subpage"));
-			WStringStream* page = new WStringStream(4*1024);
-			httpHeader(subpage->getTitle());
+			AsyncResponseStream* page = httpHeader(request, subpage->getTitle());
 			printHttpCaption(page);
-			subpage->printPage(webServer, page);
-			page->webserverSendAndFlush(webServer);
-			delete page;
-			httpFooter();
-		}
+			subpage->printPage(request, page);
+			httpFooter(page);
+			request->send(page);
+					}
 	}
 
-	void handleHttpDevicePageSubmitted(WDevice *&device, WPage *&subpage) {
+	void handleHttpDevicePageSubmitted(AsyncWebServerRequest *request, WDevice *device, WPage *subpage) {
 		if (isWebServerRunning()) {
 			wlog->notice(F("handleHttpDevicePageSubmitted "), device->getId());
-			webServer->client().setNoDelay(true);
-			httpHeader(subpage->getTitle());
-			WStringStream* page = new WStringStream(2048);
+			AsyncResponseStream* page = httpHeader(request, subpage->getTitle());
 			printHttpCaption(page);
-			subpage->submittedPage(webServer, page);
-			page->webserverSendAndFlush(webServer);
-			page->print(FPSTR(HTTP_HOME_BUTTON));
-			page->webserverSendAndFlush(webServer);
-			delete page;
-			httpFooter();
-			wlog->notice(F("handleHttpDevicePageSubmitted Done"));
+			subpage->submittedPage(request, page);
+			page->printf_P(HTTP_HOME_BUTTON);
+			httpFooter(page);
+			request->send(page);
+						wlog->notice(F("handleHttpDevicePageSubmitted Done"));
 		}
 	}
 
-	void handleHttpNetworkConfiguration() {
+	void handleHttpNetworkConfiguration(AsyncWebServerRequest *request) {
 		if (isWebServerRunning()) {
 			// stop timer 
 			// resetWifiTimeout
 			if (wifiModeRunning == wnWifiMode_t::WIFIMODE_FALLBACK) this->apStartedAt=millis();
 			wlog->notice(F("Network config page"));
-			httpHeader(F("Network Configuration"));
-			WStringStream* page = new WStringStream(2*1024);
+			AsyncResponseStream* page = httpHeader(request, F("Network Configuration"));
 			printHttpCaption(page);
-			page->printAndReplace(FPSTR(HTTP_CONFIG_PAGE_BEGIN), "");
-			page->printAndReplace(FPSTR(HTTP_PAGE_CONFIGURATION_STYLE), (this->isSupportingMqtt() ? "block" : "none"));
-			page->printAndReplace(FPSTR(HTTP_TEXT_FIELD), "Hostname/Idx:", "i", "16", getIdx());
-			page->printAndReplace(FPSTR(HTTP_TEXT_FIELD), "Wifi ssid (only 2.4G):", "s", "32", getSsid());
-			page->printAndReplace(FPSTR(HTTP_PASSWORD_FIELD), "Wifi password:", "p", "p", "p", "32", (strlen(getPassword()) ?  FORM_PW_NOCHANGE : ""));
-			page->printf(FPSTR(HTTP_PAGE_CONFIGURATION_OPTION), "apfb", (this->isSupportingApFallback() ? HTTP_CHECKED : ""),
+			page->printf_P(HTTP_CONFIG_PAGE_BEGIN, "");
+			page->printf_P(HTTP_PAGE_CONFIGURATION_STYLE, (this->isSupportingMqtt() ? "block" : "none"));
+			page->printf_P(HTTP_TEXT_FIELD, "Hostname/Idx:", "i", "16", getIdx());
+			page->printf_P(HTTP_TEXT_FIELD, "Wifi ssid (only 2.4G):", "s", "32", getSsid());
+			page->printf_P(HTTP_PASSWORD_FIELD, "Wifi password:", "p", "p", "p", "32", (strlen(getPassword()) ?  FORM_PW_NOCHANGE : ""));
+			page->printf_P(HTTP_PAGE_CONFIGURATION_OPTION, "apfb", (this->isSupportingApFallback() ? HTTP_CHECKED : ""),
 			"", HTTP_PAGE_CONFIIGURATION_OPTION_APFALLBACK);
-			page->webserverSendAndFlush(webServer);
 			//mqtt
-			page->printf(FPSTR(HTTP_PAGE_CONFIGURATION_OPTION), "mq", (this->isSupportingMqtt() ? HTTP_CHECKED : ""), 
+			page->printf_P(HTTP_PAGE_CONFIGURATION_OPTION, "mq", (this->isSupportingMqtt() ? HTTP_CHECKED : ""), 
 				"id='mqttEnabled'onclick='hideMqttGroup()'", HTTP_PAGE_CONFIIGURATION_OPTION_MQTT);
-			page->print(FPSTR(HTTP_PAGE_CONFIGURATION_MQTT_BEGIN));
-			page->printAndReplace(FPSTR(HTTP_TEXT_FIELD), "MQTT Server:", "ms", "32", getMqttServer());
-			page->printAndReplace(FPSTR(HTTP_TEXT_FIELD), "MQTT Port:", "mo", "4", getMqttPort());
-			page->printAndReplace(FPSTR(HTTP_TEXT_FIELD), "MQTT User:", "mu", "16", getMqttUser());
-			page->printAndReplace(FPSTR(HTTP_PASSWORD_FIELD), "MQTT Password:", "mp", "mp", "mp", "32", (strlen(getMqttPassword()) ?  FORM_PW_NOCHANGE : ""));
-			page->printAndReplace(FPSTR(HTTP_TEXT_FIELD), "Topic, e.g.'home/room':", "mt", "32", getMqttTopic());
+			page->printf_P(HTTP_PAGE_CONFIGURATION_MQTT_BEGIN);
+			page->printf_P(HTTP_TEXT_FIELD, "MQTT Server:", "ms", "32", getMqttServer());
+			page->printf_P(HTTP_TEXT_FIELD, "MQTT Port:", "mo", "4", getMqttPort());
+			page->printf_P(HTTP_TEXT_FIELD, "MQTT User:", "mu", "16", getMqttUser());
+			page->printf_P(HTTP_PASSWORD_FIELD, "MQTT Password:", "mp", "mp", "mp", "32", (strlen(getMqttPassword()) ?  FORM_PW_NOCHANGE : ""));
+			page->printf_P(HTTP_TEXT_FIELD, "Topic, e.g.'home/room':", "mt", "32", getMqttTopic());
 
-			page->printf(FPSTR(HTTP_PAGE_CONFIGURATION_OPTION), "mqhass", (this->isSupportingMqttHASS() ? HTTP_CHECKED : ""),
+			page->printf_P(HTTP_PAGE_CONFIGURATION_OPTION, "mqhass", (this->isSupportingMqttHASS() ? HTTP_CHECKED : ""),
 				"", HTTP_PAGE_CONFIIGURATION_OPTION_MQTTHASS);
-			page->printf(FPSTR(HTTP_PAGE_CONFIGURATION_OPTION), "mqsv", (this->isSupportingMqttSingleValues() ? HTTP_CHECKED : ""),
+			page->printf_P(HTTP_PAGE_CONFIGURATION_OPTION, "mqsv", (this->isSupportingMqttSingleValues() ? HTTP_CHECKED : ""),
 				"", HTTP_PAGE_CONFIIGURATION_OPTION_MQTTSINGLEVALUES);
 
-			page->print(FPSTR(HTTP_PAGE_CONFIGURATION_MQTT_END));
-			page->print(FPSTR(HTTP_CONFIG_SAVE_BUTTON));
-			page->webserverSendAndFlush(webServer);
-			delete page;
-			httpFooter();
-		}
+			page->printf_P(HTTP_PAGE_CONFIGURATION_MQTT_END);
+			page->printf_P(HTTP_CONFIG_SAVE_BUTTON);
+			httpFooter(page);
+			request->send(page);
+					}
 	}
 
-	void handleHttpSaveConfiguration() {
+	void handleHttpSaveConfiguration(AsyncWebServerRequest *request) {
 		if (isWebServerRunning()) {
 #ifndef MINIMAL
 			// remove old autoconfiguration
 			sendMqttHassAutodiscover(true);
 #endif			
 
-			this->idx->setString(webServer->arg("i").c_str());
-			this->ssid->setString(webServer->arg("s").c_str());
-			settings->setString("password",  (webServer->arg("p").equals(FORM_PW_NOCHANGE) ? getPassword() : webServer->arg("p").c_str())) ;
-			settings->setString("mqttServer", webServer->arg("ms").c_str());
-			String mqtt_port = webServer->arg("mo");
+			this->idx->setString(request->getParam("i")->value().c_str());
+			this->ssid->setString(request->getParam("s")->value().c_str());
+			settings->setString("password",  (request->getParam("p")->value().equals(FORM_PW_NOCHANGE) ? getPassword() : request->getParam("p")->value().c_str())) ;
+			settings->setString("mqttServer", request->getParam("ms")->value().c_str());
+			String mqtt_port = request->getParam("mo")->value();
 			settings->setString("mqttPort", (mqtt_port != "" ? mqtt_port.c_str() : "1883"));
-			settings->setString("mqttUser", webServer->arg("mu").c_str());
-			settings->setString("mqttPassword",(webServer->arg("mp").equals(FORM_PW_NOCHANGE) ? getMqttPassword() : webServer->arg("mp").c_str()));
-			this->mqttBaseTopic->setString(webServer->arg("mt").c_str());
+			settings->setString("mqttUser", request->getParam("mu")->value().c_str());
+			settings->setString("mqttPassword",(request->getParam("mp")->value().equals(FORM_PW_NOCHANGE) ? getMqttPassword() : request->getParam("mp")->value().c_str()));
+			this->mqttBaseTopic->setString(request->getParam("mt")->value().c_str());
 			byte nb1 = 0;
-			if (webServer->arg("mq") == "true") nb1 |= NETBITS1_MQTT;
-			if (webServer->arg("mqhass") == "true") nb1 |= NETBITS1_HASS;
-			if (webServer->arg("apfb") == "true") nb1 |= NETBITS1_APFALLBACK;
-			if (webServer->arg("mqsv") == "true") nb1 |= NETBITS1_MQTTSINGLEVALUES;
+			if (request->getParam("mq")->value().c_str() == "true") nb1 |= NETBITS1_MQTT;
+			if (request->getParam("mqhass")->value().c_str() == "true") nb1 |= NETBITS1_HASS;
+			if (request->getParam("apfb")->value().c_str() == "true") nb1 |= NETBITS1_APFALLBACK;
+			if (request->getParam("mqsv")->value().c_str() == "true") nb1 |= NETBITS1_MQTTSINGLEVALUES;
 			settings->setByte("netbits1", nb1);
 			wlog->notice(F("supportingMqtt set to: %d"), nb1);
 			settings->save(); 
-			this->restart("Settings saved.");
+			this->restart(request, "Settings saved.");
 			// we must not here this->supportingMqtt -> if it _was_ disabled and we're going to enable it here
 			// mqtt would not be initialized but would be used immediately
 		}
 	}
 
-	void handleHttpSaveDeviceConfiguration(WDevice *&device) {
+	void handleHttpSaveDeviceConfiguration(AsyncWebServerRequest *request, WDevice *device) {
 		if (isWebServerRunning()) {
 			wlog->notice(F("handleHttpSaveDeviceConfiguration "), device->getId());
-			device->saveConfigPage(webServer);
+			device->saveConfigPage(request);
 			settings->save();
 			if (device->isConfigNeedsReboot()){
 				wlog->notice(F("Reboot "));
 				delay(300);
-				this->restart("Device settings saved.");
+				this->restart(request, "Device settings saved.");
 			} else {
-				this->webReturnStatusPage("Device settings saved.", "");
+				this->webReturnStatusPage(request, "Device settings saved.", "");
 			}
 			wlog->notice(F("handleHttpSaveDeviceConfiguration Done"));
 		}
 	}
 
-	void handleHttpInfo() {
+	void handleHttpInfo(AsyncWebServerRequest *request) {
 		if (isWebServerRunning()) {
-			httpHeader("Info");
-			WStringStream* page = new WStringStream(1024);
+			AsyncResponseStream* page = httpHeader(request, "Info");
 			printHttpCaption(page);
-			page->print("<table>");
+			page->printf("<table>");
 			// header
-			page->print("<tr><th colspan=\"2\"><h4>Main</h4></th></tr>");
+			page->printf("<tr><th colspan=\"2\"><h4>Main</h4></th></tr>");
 
 
 			htmlTableRowTitle(page, F("Chip ID:"));
@@ -1174,36 +1185,32 @@ private:
 			days, hours, minutes, secs);
 			page->print("</td></tr>");
 
-			page->webserverSendAndFlush(webServer);
-
 			WDevice *device = this->firstDevice;
 			while (device != nullptr) {
 				if (device->hasInfoPage()){
 					page->print("<tr><th colspan=\"2\"><h4>");
 					page->print(device->getName());
 					page->print("</h4></th></tr>");
-					device->printInfoPage(page);
-					page->webserverSendAndFlush(webServer);
+					//device->printInfoPage(page);
 				}
 				device = device->next;
 			}
 			page->print("</table>");	
 			page->print("<br/><br/>");			
 			page->print(FPSTR(HTTP_HOME_BUTTON));
-			page->webserverSendAndFlush(webServer);
-			delete page;
-			httpFooter();
+			httpFooter(page);
+			request->send(page);
 		}
 	}
 
 	/** Handle the reset page */
-	void handleHttpReset() {
+	void handleHttpReset(AsyncWebServerRequest *request) {
 		if (isWebServerRunning()) {
-			this->restart("Resetting was caused manually by web interface. ");
+			this->restart(request, "Resetting was caused manually by web interface. ");
 		}
 	}
 
-	void printHttpCaption(WStringStream* page) {
+	void printHttpCaption(AsyncResponseStream* page) {
 		page->print("<h2>");
 		page->print(applicationName);
 		page->print(" ");
@@ -1218,27 +1225,24 @@ private:
 
 	}
 
-	template<class T, typename ... Args> void httpHeader(T title, const __FlashStringHelper * HeaderAdditional) {
-		if (!isWebServerRunning()) return;
-		webServer->setContentLength(CONTENT_LENGTH_UNKNOWN);
-		webServer->send(200, TEXT_HTML, "");
-		WStringStream* page = new WStringStream(1*1024);
-		page->printf(FPSTR(HTTP_HEAD_BEGIN), getIdx(), title);
-		page->webserverSendAndFlush(webServer);
-		delete page;
-		webServer->sendContent_P(HTTP_SCRIPT);
-		webServer->sendContent_P(HTTP_STYLE);
-		if (HeaderAdditional!=nullptr) webServer->sendContent(FPSTR(HeaderAdditional));
-		webServer->sendContent_P(HTTP_HEAD_END);
+	template<class T, typename ... Args> AsyncResponseStream * httpHeader(AsyncWebServerRequest *request, T title, const __FlashStringHelper * HeaderAdditional) {
+		if (!isWebServerRunning()) return nullptr;
+		AsyncResponseStream *page = request->beginResponseStream(TEXT_HTML);
+		page->printf_P(HTTP_HEAD_BEGIN, getIdx(), title);
+		page->print(FPSTR(HTTP_SCRIPT));
+		page->print(FPSTR(HTTP_STYLE));
+		if (HeaderAdditional!=nullptr) page->print(FPSTR(HeaderAdditional));
+		page->print(FPSTR(HTTP_HEAD_END));
+		return page;
 	}
 
-	template<class T, typename ... Args> void httpHeader(T title) {
-		httpHeader(title, NULL);
+	template<class T, typename ... Args> AsyncResponseStream * httpHeader(AsyncWebServerRequest *request, T title) {
+		return httpHeader(request, title, NULL);
 	}
 
-	void httpFooter() {
+	void httpFooter(AsyncResponseStream  *page) {
 		if (!isWebServerRunning()) return;
-		webServer->sendContent_P(HTTP_BODY_END);
+		page->print(FPSTR(HTTP_BODY_END));
 	}
 
 
@@ -1268,35 +1272,33 @@ private:
 		return hostName;
 	}
 
-	void handleHttpFirmwareUpdate() {
+	void handleHttpFirmwareUpdate(AsyncWebServerRequest *request) {
 		if (isWebServerRunning()) {
-			httpHeader(F("Firmware update"));
-			WStringStream* page = new WStringStream(1024);
+			AsyncResponseStream* page = httpHeader(request, F("Firmware update"));
 			printHttpCaption(page);
-			page->print(FPSTR(HTTP_FORM_FIRMWARE));
+			page->print(HTTP_FORM_FIRMWARE);
 			page->print("Available sketch size: ");
 			page->print(ESP.getFreeSketchSpace());
 			page->print(" kByte");
-			page->print(FPSTR(HTTP_BODY_END));
-			page->webserverSendAndFlush(webServer);
-			delete page;
-			httpFooter();
-		}
+			page->print(HTTP_BODY_END);
+			httpFooter(page);
+			request->send(page);
+					}
 	}
 
-	void handleHttpFirmwareUpdateFinished() {
+	void handleHttpFirmwareUpdateFinished(AsyncWebServerRequest *request) {
 		if (isWebServerRunning()) {
 			if (Update.hasError()) {
-				this->restart(firmwareUpdateError);
+				this->restart(request, firmwareUpdateError);
 			} else {
-				this->restart("Update successful.");
+				this->restart(request, "Update successful.");
 			}
 		}
 	}
 
-	void handleHttpFirmwareUpdateProgress() {
+	void handleHttpFirmwareUpdateProgress(AsyncWebServerRequest *request) {
 		if (isWebServerRunning()) {
-
+#ifdef XXXXXXXXXXXX
 			HTTPUpload& upload = webServer->upload();
 			//Start firmwareUpdate
 			this->updateRunning = true;
@@ -1314,16 +1316,17 @@ private:
 					setFirmwareUpdateError("Can't start update (" + String(free_space) + "): ");
 				}
 			} else if (upload.status == UPLOAD_FILE_WRITE) {
-			    if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
-			    	setFirmwareUpdateError("Can't upload file: ");
-			    }
+				if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+					setFirmwareUpdateError("Can't upload file: ");
+				}
 			} else if (upload.status == UPLOAD_FILE_END) {
-			    if (Update.end(true)) { //true to set the size to the current progress
-			    	wlog->notice(F("Update complete: "));
-			    } else {
-			    	setFirmwareUpdateError("Can't finish update: ");
-			    }
+				if (Update.end(true)) { //true to set the size to the current progress
+					wlog->notice(F("Update complete: "));
+				} else {
+					setFirmwareUpdateError("Can't finish update: ");
+				}
 			}
+#endif
 		}
 	}
 
@@ -1366,21 +1369,18 @@ private:
 		wlog->notice(s.c_str());
 	}
 
-	void webReturnStatusPage(const char* reasonMessage1, const char* reasonMessage2) {
-		webServer->client().setNoDelay(true);
-		httpHeader(reasonMessage1);
-		WStringStream* page = new WStringStream(512);
+	void webReturnStatusPage(AsyncWebServerRequest *request, const char* reasonMessage1, const char* reasonMessage2) {
+		AsyncResponseStream* page = httpHeader(request, reasonMessage1);
 		printHttpCaption(page);
-		page->printAndReplace(FPSTR(HTTP_SAVED), reasonMessage1, reasonMessage2);
-		page->print(FPSTR(HTTP_HOME_BUTTON));
-		page->webserverSendAndFlush(webServer);
-		delete page;
-		httpFooter();
-	}
+		page->printf_P(HTTP_SAVED, reasonMessage1, reasonMessage2);
+		page->print(HTTP_HOME_BUTTON);
+		httpFooter(page);
+		request->send(page);
+			}
 	
-	void restart(const char* reasonMessage) {
+	void restart(AsyncWebServerRequest *request, const char* reasonMessage) {
 		this->restartFlag = reasonMessage;
-		webReturnStatusPage(reasonMessage, "ESP reboots now...");
+		webReturnStatusPage(request, reasonMessage, "ESP reboots now...");
 	}
 
 	bool loadSettings(){
@@ -1470,23 +1470,16 @@ private:
 				wlog->notice(F("Settings are not complete:"));
 			}
 			wlog->notice(F("SSID: '%s'; MQTT enabled: %d; MQTT server: '%s'; MQTT port: %s; WebThings enabled: %d"),
-								  getSsid(), isSupportingMqtt(), getMqttServer(), getMqttPort(), isSupportingWebThing());
+								getSsid(), isSupportingMqtt(), getMqttServer(), getMqttPort(), isSupportingWebThing());
 
 		}
 		EEPROM.end();
 		return settingsStored;
 	}
 
-	void handleUnknown() {
-		wlog->warning(F("Webserver: 404: '%s'"), this->webServer->uri().c_str());
-		webServer->send(404, "text/plain", "404: Not found");
-		webServer->client().stop();
-	}
-
-
-	void handleCaptivePortal() {
-		wlog->warning(F("Webserver: captive Portal: '%s'"));
-		webServer->send(200, "text/plain", "200: Servus");
+	void handleUnknown(AsyncWebServerRequest *request) {
+		wlog->warning(F("Webserver: 404: '%s'"), request->url().c_str());
+		request->send(404, "text/plain", "404: Not found");
 	}
 
 	void sendDevicesStructure() {
@@ -1502,7 +1495,7 @@ private:
 			device = device->next;
 		}
 		json.endArray();
-		webServer->send(200, APPLICATION_JSON, response->c_str());
+		//FIXMEwebServer->send(200, APPLICATION_JSON, response->c_str());
 	}
 
 	void sendDeviceStructure(WDevice *&device) {
@@ -1510,7 +1503,7 @@ private:
 		WStringStream* response = getResponseStream();
 		WJson json(response);
 		device->toJsonStructure(&json, "", WEBTHING);
-		webServer->send(200, APPLICATION_JSON, response->c_str());
+		//FIXMEwebServer->send(200, APPLICATION_JSON, response->c_str());
 	}
 
 	void sendDeviceValues(WDevice *&device) {
@@ -1525,7 +1518,7 @@ private:
 		}
 		device->toJsonValues(&json, WEBTHING);
 		json.endObject();
-		webServer->send(200, APPLICATION_JSON, response->c_str());
+		//FIXMEwebServer->send(200, APPLICATION_JSON, response->c_str());
 	}
 
 #ifndef MINIMAL
@@ -1563,11 +1556,13 @@ private:
 		json.endObject();
 		property->setRequested(true);
 		wlog->trace(F("getPropertyValue %s"), response->c_str());
-		webServer->send(200, APPLICATION_JSON, response->c_str());
+		//FIXMEwebServer->send(200, APPLICATION_JSON, response->c_str());
 
 	}
 
 	void setPropertyValue(WDevice *device) {
+		//FIXME
+		#if 0
 		if (webServer->hasArg("plain") == false) {
 			webServer->send(422);
 			return;
@@ -1588,9 +1583,12 @@ private:
 			wlog->notice(F("unable to parse json: %s"), webServer->arg("plain").c_str());
 			webServer->send(500);
 		}
+		#endif
 	}
 
 	void sendErrorMsg(int status, const char *msg) {
+		//FIXME
+		#if 0
 		WStringStream* response = getResponseStream();
 		WJson json(response);
 		json.beginObject();
@@ -1598,9 +1596,12 @@ private:
 		json.propertyInteger("status", status);
 		json.endObject();
 		webServer->send(200, APPLICATION_JSON, response->c_str());
+		#endif
 	}
 
 	void bindWebServerCallsNetwork(WDevice *device) {
+		//FIXME
+		#if 0
 		wlog->notice(F("Bind webServer calls for device %s"), device->getId());
 		String deviceBase("/things/");
 		deviceBase.concat(device->getId());
@@ -1608,15 +1609,16 @@ private:
 		while (property != nullptr) {
 			if (property->isVisible(WEBTHING)) {
 				String propertyBase = deviceBase + "/properties/" + property->getId();
-				webServer->on(propertyBase.c_str(), HTTP_GET, std::bind(&WNetwork::getPropertyValue, this, property));
-				webServer->on(propertyBase.c_str(), HTTP_PUT, std::bind(&WNetwork::setPropertyValue, this, device));
+				webServer->on(propertyBase.c_str(), HTTP_GET, getPropertyValue(property));
+				webServer->on(propertyBase.c_str(), HTTP_PUT, setPropertyValue(device));
 			}
 			property = property->next;
 		}
 		String propertiesBase = deviceBase + "/properties";
-		webServer->on(propertiesBase.c_str(), HTTP_GET,	std::bind(&WNetwork::sendDeviceValues, this, device));
-		webServer->on(deviceBase.c_str(), HTTP_GET,	std::bind(&WNetwork::sendDeviceStructure, this, device));
+		webServer->on(propertiesBase.c_str(), HTTP_GET,	sendDeviceValues(device));
+		webServer->on(deviceBase.c_str(), HTTP_GET,	sendDeviceStructure(device));
 		device->bindWebServerCalls(webServer);
+		#endif
 	}
 
 	WDevice* getDeviceById(const char* deviceId) {
@@ -1628,6 +1630,9 @@ private:
 			device = device->next;
 		}
 		return nullptr;
+	}
+
+	void handleWebSocket() {
 	}
 
 };
