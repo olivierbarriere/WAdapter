@@ -69,6 +69,7 @@ public:
 	}
 
 	const char* getTitle() {
+		if (title==nullptr) return id;
 		return title;
 	}
 

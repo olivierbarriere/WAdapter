@@ -14,13 +14,22 @@
 #include "WLed.h"
 #include "WPage.h"
 
-const char* DEVICE_TYPE_ON_OFF_SWITCH = "OnOffSwitch";
-const char* DEVICE_TYPE_LIGHT = "Light";
-const char* DEVICE_TYPE_TEMPERATURE_SENSOR = "TemperatureSensor";
-const char* DEVICE_TYPE_THERMOSTAT = "Thermostat";
-const char* DEVICE_TYPE_LOG = "Log";
-const char* DEVICE_TYPE_TEXT_DISPLAY = "TextDisplay";
-const char* DEVICE_TYPE_NETWORK = "Network";
+const char* DEVICE_TYPE_ON_OFF_SWITCH PROGMEM = "OnOffSwitch";
+const char* DEVICE_TYPE_LIGHT PROGMEM = "Light";
+const char* DEVICE_TYPE_TEMPERATURE_SENSOR PROGMEM = "TemperatureSensor";
+const char* DEVICE_TYPE_THERMOSTAT PROGMEM = "Thermostat";
+const char* DEVICE_TYPE_LOG PROGMEM = "Log";
+const char* DEVICE_TYPE_TEXT_DISPLAY PROGMEM = "TextDisplay";
+const char* DEVICE_TYPE_NETWORK PROGMEM = "Network";
+
+const char * STR_NAME PROGMEM = "name";
+const char * STR_THINGS PROGMEM = "/things/";
+const char * STR_HREF PROGMEM = "href";
+const char * STR_CONTEXT PROGMEM = "@context";
+const char * STR_IOTDOTMOZILLA PROGMEM = "https://iot.mozilla.org/schemas";
+const char * STR_TITLE PROGMEM = "title";
+const char * STR_TYPE PROGMEM = "@type";
+const char * STR_PROPERTIES PROGMEM = "properties";
 
 class WNetwork;
 
@@ -120,19 +129,19 @@ public:
 
 	virtual void toJsonStructure(WJson* json, const char* deviceHRef, WPropertyVisibility visibility) {
 		json->beginObject();
-		json->propertyString("name", this->getFullName());
+		json->propertyString(STR_NAME, this->getFullName());
 		String result(deviceHRef);
-		result.concat("/things/");
+		result.concat(STR_THINGS);
 		result.concat(this->getId());
-		json->propertyString("href", result.c_str());
-		json->propertyString("@context", "https://iot.mozilla.org/schemas");
-		json->propertyString("title",  this->getFullName());
+		json->propertyString(STR_HREF, result.c_str());
+		json->propertyString(STR_CONTEXT, STR_IOTDOTMOZILLA);
+		json->propertyString(STR_TITLE,  this->getFullName());
 		//type
-		json->beginArray("@type");
+		json->beginArray(STR_TYPE);
 		json->string(getType());
 		json->endArray();
 		//properties
-		json->beginObject("properties");
+		json->beginObject(STR_PROPERTIES);
 		WProperty* property = this->firstProperty;
 		while (property != nullptr) {
 			if (property->isVisible(visibility)) {

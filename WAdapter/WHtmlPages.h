@@ -4,12 +4,12 @@
 #include "Arduino.h"
 #include "WStringStream.h"
 
-const char* HTTP_SELECTED = "selected";
-const char* HTTP_CHECKED = "checked";
-const char* HTTP_NONE = "none";
-const char* HTTP_BLOCK = "block";
-const char* HTTP_TRUE = "true";
-const char* HTTP_FALSE = "false";
+const char* HTTP_SELECTED PROGMEM = "selected";
+const char* HTTP_CHECKED PROGMEM = "checked";
+const char* HTTP_NONE PROGMEM = "none";
+const char* HTTP_BLOCK PROGMEM = "block";
+const char* HTTP_TRUE PROGMEM = "true";
+const char* HTTP_FALSE PROGMEM = "false";
 
 const static char HTTP_HEAD_BEGIN[]         PROGMEM = R"=====(<!DOCTYPE html>
 <html lang='en'>
@@ -230,18 +230,18 @@ const static char HTTP_CONFIG_SAVE_BUTTON[]         PROGMEM = R"=====(
 )=====";
 
 void htmlTableRowTitle(AsyncResponseStream* page,  char const* title){
-	page->print("<tr><th>");
+	page->print(F("<tr><th>"));
 	page->print(title);
-	page->print("</th><td>");
+	page->print(F("</th><td>"));
 }
 void htmlTableRowTitle(AsyncResponseStream* page,  const __FlashStringHelper * title){
-	page->print("<tr><th>");
+	page->print(F("<tr><th>"));
 	page->print(title);
-	page->print("</th><td>");
+	page->print(F("</th><td>"));
 }
 
 void htmlTableRowEnd(AsyncResponseStream* page){
-	page->print("</td></tr>");
+	page->print(F("</td></tr>"));
 }
 
 #endif

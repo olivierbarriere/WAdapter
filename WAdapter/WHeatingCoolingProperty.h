@@ -3,9 +3,9 @@
 
 #include "WProperty.h"
 
-const char* VALUE_OFF = "off";
-const char* VALUE_HEATING = "heating";
-const char* VALUE_COOLING = "cooling";
+const char* VALUE_OFF PROGMEM = "off";
+const char* VALUE_HEATING PROGMEM = "heating";
+const char* VALUE_COOLING PROGMEM = "cooling";
 
 class WHeatingCoolingProperty: public WProperty {
 public:

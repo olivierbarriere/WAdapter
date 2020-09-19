@@ -28,26 +28,36 @@
 #define SIZE_MQTT_PACKET 1536
 #define SIZE_JSON_PACKET 2048
 #define NO_LED -1
-const char* CONFIG_PASSWORD = "12345678";
-const char* APPLICATION_JSON = "application/json";
-const char* TEXT_HTML = "text/html";
-const char* TEXT_PLAIN = "text/plain";
+const char* CONFIG_PASSWORD PROGMEM = "12345678";
+const char* APPLICATION_JSON PROGMEM = "application/json";
+const char* TEXT_HTML PROGMEM = "text/html";
+const char* TEXT_PLAIN PROGMEM = "text/plain";
 
-const char* DEFAULT_TOPIC_STATE = "properties";
-const char* DEFAULT_TOPIC_SET = "set";
+const char* DEFAULT_TOPIC_STATE PROGMEM = "properties";
+const char* DEFAULT_TOPIC_SET PROGMEM = "set";
 
 #ifndef MINIMAL
-const char* MQTT_CMND = "cmnd";
-const char* MQTT_STAT = "stat";
-const char* MQTT_TELE = "tele";
+const char* MQTT_CMND PROGMEM = "cmnd";
+const char* MQTT_STAT PROGMEM = "stat";
+const char* MQTT_TELE PROGMEM = "tele";
 #endif
 
-const char* FORM_PW_NOCHANGE = "___NOCHANGE___";
+const char* FORM_PW_NOCHANGE PROGMEM = "___NOCHANGE___";
 
 const byte NETBITS1_MQTT       = 1;
 const byte NETBITS1_HASS       = 2;
 const byte NETBITS1_APFALLBACK = 4;
 const byte NETBITS1_MQTTSINGLEVALUES = 8;
+
+const char* PROP_IDX PROGMEM = "idx";
+const char* PROP_SSID PROGMEM = "ssid";
+const char* PROP_PASSWORD PROGMEM = "password";
+const char* PROP_NETBITS1 PROGMEM = "netbits1";
+const char* PROP_MQTTSERVER PROGMEM = "mqttServer";
+const char* PROP_MQTTPORT PROGMEM = "mqttPort";
+const char* PROP_MQTTUSER PROGMEM = "mqttUser";
+const char* PROP_MQTTPASSWORD PROGMEM = "mqttPassword";
+const char* PROP_MQTTTOPIC PROGMEM = "mqttTopic";
 
 #ifdef DEBUG
 const int maxApRunTimeMinutes = 2;
@@ -638,15 +648,15 @@ true ||
 	}
 
 	const char* getPassword() {
-		return settings->getString("password");
+		return settings->getString(PROP_PASSWORD);
 	}
 
 	const char* getMqttServer() {
-		return settings->getString("mqttServer");
+		return settings->getString(PROP_MQTTSERVER);
 	}
 
 	const char* getMqttPort() {
-		return settings->getString("mqttPort");
+		return settings->getString(PROP_MQTTPORT);
 	}
 
 	const char* getMqttTopic() {
@@ -654,11 +664,11 @@ true ||
 	}
 
 	const char* getMqttUser() {
-		return settings->getString("mqttUser");
+		return settings->getString(PROP_MQTTUSER);
 	}
 
 	const char* getMqttPassword() {
-		return settings->getString("mqttPassword");
+		return settings->getString(PROP_MQTTPASSWORD);
 	}
 
 	void addDevice(WDevice *device) {
@@ -778,7 +788,7 @@ private:
 				WJson json(response);
 				json.beginObject();
 				if (device->isMainDevice()) {
-					json.propertyString("idx", getIdx());
+					json.propertyString(PROP_IDX, getIdx());
 					json.propertyString("ip", getDeviceIp().toString().c_str());
 					json.propertyString("firmware", firmwareVersion.c_str());
 				}
@@ -952,7 +962,7 @@ private:
 				AsyncResponseStream* page = httpHeader(request, "Main");
 				printHttpCaption(page);
 				WDevice *device = firstDevice;
-				page->printf_P(HTTP_BUTTON, "wifi", "get", "Configure Network");
+				page->printf_P(HTTP_BUTTON, "wifi", "get", F("Configure Network"));
 				while (device != nullptr) {
 					if (device->isProvidingConfigPage()) {
 						String s("Configure ");
@@ -971,7 +981,7 @@ private:
 					}
 					device = device->next;
 				}
-				page->printf_P(HTTP_BUTTON, "firmware", "get", "Update firmware");
+				page->printf_P(HTTP_BUTTON, "firmware", "get", F("Update firmware"));
 				page->printf_P(HTTP_BUTTON, "info", "get", "Info");
 				page->printf_P(HTTP_BUTTON, "reset", "post", "Reboot");
 				httpFooter(page);
@@ -980,8 +990,8 @@ private:
 			} else {
 				AsyncResponseStream* page = httpHeader(request, "Info", F("<meta http-equiv=\"refresh\" content=\"10\">"));
 				page->print(restartFlag);
-				page->print("<br><br>");
-				page->print("Module will reset in a few seconds...");
+				page->print(F("<br><br>"));
+				page->print(F("Module will reset in a few seconds..."));
 				httpFooter(page);
 				request->send(page);
 			}
@@ -1032,25 +1042,25 @@ private:
 			AsyncResponseStream* page = httpHeader(request, F("Network Configuration"));
 			printHttpCaption(page);
 			page->printf_P(HTTP_CONFIG_PAGE_BEGIN, "");
-			page->printf_P(HTTP_PAGE_CONFIGURATION_STYLE, (this->isSupportingMqtt() ? "block" : "none"));
-			page->printf_P(HTTP_TEXT_FIELD, "Hostname/Idx:", "i", "16", getIdx());
-			page->printf_P(HTTP_TEXT_FIELD, "Wifi ssid (only 2.4G):", "s", "32", getSsid());
-			page->printf_P(HTTP_PASSWORD_FIELD, "Wifi password:", "p", "p", "p", "32", (strlen(getPassword()) ?  FORM_PW_NOCHANGE : ""));
+			page->printf_P(HTTP_PAGE_CONFIGURATION_STYLE, (this->isSupportingMqtt() ? F("block") : F("none")));
+			page->printf_P(HTTP_TEXT_FIELD, F("Hostname/Idx:"), "i", "16", getIdx());
+			page->printf_P(HTTP_TEXT_FIELD, F("Wifi ssid (only 2.4G):"), "s", "32", getSsid());
+			page->printf_P(HTTP_PASSWORD_FIELD, F("Wifi password:"), "p", "p", "p", "32", (strlen(getPassword()) ?  FORM_PW_NOCHANGE : ""));
 			page->printf_P(HTTP_PAGE_CONFIGURATION_OPTION, "apfb", (this->isSupportingApFallback() ? HTTP_CHECKED : ""),
 			"", HTTP_PAGE_CONFIIGURATION_OPTION_APFALLBACK);
 			//mqtt
 			page->printf_P(HTTP_PAGE_CONFIGURATION_OPTION, "mq", (this->isSupportingMqtt() ? HTTP_CHECKED : ""), 
-				"id='mqttEnabled'onclick='hideMqttGroup()'", HTTP_PAGE_CONFIIGURATION_OPTION_MQTT);
+				F("id='mqttEnabled'onclick='hideMqttGroup()'"), HTTP_PAGE_CONFIIGURATION_OPTION_MQTT);
 			page->printf_P(HTTP_PAGE_CONFIGURATION_MQTT_BEGIN);
-			page->printf_P(HTTP_TEXT_FIELD, "MQTT Server:", "ms", "32", getMqttServer());
-			page->printf_P(HTTP_TEXT_FIELD, "MQTT Port:", "mo", "4", getMqttPort());
-			page->printf_P(HTTP_TEXT_FIELD, "MQTT User:", "mu", "16", getMqttUser());
-			page->printf_P(HTTP_PASSWORD_FIELD, "MQTT Password:", "mp", "mp", "mp", "32", (strlen(getMqttPassword()) ?  FORM_PW_NOCHANGE : ""));
-			page->printf_P(HTTP_TEXT_FIELD, "Topic, e.g.'home/room':", "mt", "32", getMqttTopic());
+			page->printf_P(HTTP_TEXT_FIELD, F("MQTT Server:"), "ms", "32", getMqttServer());
+			page->printf_P(HTTP_TEXT_FIELD, F("MQTT Port:"), "mo", "4", getMqttPort());
+			page->printf_P(HTTP_TEXT_FIELD, F("MQTT User:"), "mu", "16", getMqttUser());
+			page->printf_P(HTTP_PASSWORD_FIELD, F("MQTT Password:"), "mp", "mp", "mp", "32", (strlen(getMqttPassword()) ?  FORM_PW_NOCHANGE : ""));
+			page->printf_P(HTTP_TEXT_FIELD, F("Topic, e.g.'home/room':"), "mt", "32", getMqttTopic());
 
-			page->printf_P(HTTP_PAGE_CONFIGURATION_OPTION, "mqhass", (this->isSupportingMqttHASS() ? HTTP_CHECKED : ""),
+			page->printf_P(HTTP_PAGE_CONFIGURATION_OPTION, F("mqhass"), (this->isSupportingMqttHASS() ? HTTP_CHECKED : ""),
 				"", HTTP_PAGE_CONFIIGURATION_OPTION_MQTTHASS);
-			page->printf_P(HTTP_PAGE_CONFIGURATION_OPTION, "mqsv", (this->isSupportingMqttSingleValues() ? HTTP_CHECKED : ""),
+			page->printf_P(HTTP_PAGE_CONFIGURATION_OPTION, F("mqsv"), (this->isSupportingMqttSingleValues() ? HTTP_CHECKED : ""),
 				"", HTTP_PAGE_CONFIIGURATION_OPTION_MQTTSINGLEVALUES);
 
 			page->printf_P(HTTP_PAGE_CONFIGURATION_MQTT_END);
@@ -1069,19 +1079,19 @@ private:
 
 			this->idx->setString(request->getParam("i")->value().c_str());
 			this->ssid->setString(request->getParam("s")->value().c_str());
-			settings->setString("password",  (request->getParam("p")->value().equals(FORM_PW_NOCHANGE) ? getPassword() : request->getParam("p")->value().c_str())) ;
-			settings->setString("mqttServer", request->getParam("ms")->value().c_str());
+			settings->setString(PROP_PASSWORD,  (request->getParam("p")->value().equals(FORM_PW_NOCHANGE) ? getPassword() : request->getParam("p")->value().c_str())) ;
+			settings->setString(PROP_MQTTSERVER, request->getParam("ms")->value().c_str());
 			String mqtt_port = request->getParam("mo")->value();
-			settings->setString("mqttPort", (mqtt_port != "" ? mqtt_port.c_str() : "1883"));
-			settings->setString("mqttUser", request->getParam("mu")->value().c_str());
-			settings->setString("mqttPassword",(request->getParam("mp")->value().equals(FORM_PW_NOCHANGE) ? getMqttPassword() : request->getParam("mp")->value().c_str()));
+			settings->setString(PROP_MQTTPORT, (mqtt_port != "" ? mqtt_port.c_str() : "1883"));
+			settings->setString(PROP_MQTTUSER, request->getParam("mu")->value().c_str());
+			settings->setString(PROP_MQTTPASSWORD,(request->getParam("mpF(")->value().equals(FORM_PW_NOCHANGE) ? getMqttPassword() : request->getParam(")mp")->value().c_str()));
 			this->mqttBaseTopic->setString(request->getParam("mt")->value().c_str());
 			byte nb1 = 0;
-			if (request->getParam("mq")->value().c_str() == "true") nb1 |= NETBITS1_MQTT;
-			if (request->getParam("mqhass")->value().c_str() == "true") nb1 |= NETBITS1_HASS;
-			if (request->getParam("apfb")->value().c_str() == "true") nb1 |= NETBITS1_APFALLBACK;
-			if (request->getParam("mqsv")->value().c_str() == "true") nb1 |= NETBITS1_MQTTSINGLEVALUES;
-			settings->setByte("netbits1", nb1);
+			if (request->getParam(F("mq"))->value().c_str() == "true") nb1 |= NETBITS1_MQTT;
+			if (request->getParam(F("mqhass"))->value().c_str() == "true") nb1 |= NETBITS1_HASS;
+			if (request->getParam(F("apfb"))->value().c_str() == "true") nb1 |= NETBITS1_APFALLBACK;
+			if (request->getParam(F("mqsv"))->value().c_str() == "true") nb1 |= NETBITS1_MQTTSINGLEVALUES;
+			settings->setByte(PROP_NETBITS1, nb1);
 			wlog->notice(F("supportingMqtt set to: %d"), nb1);
 			settings->save(); 
 			this->restart(request, "Settings saved.");
@@ -1388,26 +1398,26 @@ private:
 		if (settingsOld){
 			if (settingsOld->getNetworkSettingsVersion()==NETWORKSETTINGS_PRE_FAS114){
 				wlog->notice(F("Reading NetworkSettings PRE_FAS114"));
-				settingsOld->setString("idx", 32, "");
-				settingsOld->setString("ssid", 32, "");
-				settingsOld->setString("password", 64, "");
-				settingsOld->setByte("netbits1", (NETBITS1_MQTT | NETBITS1_HASS));
-				settingsOld->setString("mqttServer", 32, "");
-				settingsOld->setString("mqttPort", 4, "1883");
-				settingsOld->setString("mqttUser", 32, "");
-				settingsOld->setString("mqttPassword", 64, "");
-				settingsOld->setString("mqttTopic", 64, "");
+				settingsOld->setString(PROP_IDX, 32, "");
+				settingsOld->setString(PROP_SSID, 32, "");
+				settingsOld->setString(PROP_PASSWORD, 64, "");
+				settingsOld->setByte(PROP_NETBITS1, (NETBITS1_MQTT | NETBITS1_HASS));
+				settingsOld->setString(PROP_MQTTSERVER, 32, "");
+				settingsOld->setString(PROP_MQTTPORT, 4, "1883");
+				settingsOld->setString(PROP_MQTTUSER, 32, "");
+				settingsOld->setString(PROP_MQTTPASSWORD, 64, "");
+				settingsOld->setString(PROP_MQTTTOPIC, 64, "");
 			} else if (settingsOld->getNetworkSettingsVersion()==NETWORKSETTINGS_PRE_102 || settingsOld->getNetworkSettingsVersion()==NETWORKSETTINGS_PRE_109){
 				wlog->notice(F("Reading NetworkSettings PRE_109/PRE_102"));
-				settingsOld->setString("idx", 32, "");
-				settingsOld->setString("ssid", 64, "");
-				settingsOld->setString("password", 32, "");
-				settingsOld->setByte("netbits1", (NETBITS1_MQTT | NETBITS1_HASS));
-				settingsOld->setString("mqttServer", 32, "");
-				settingsOld->setString("mqttPort", 4, "1883");
-				settingsOld->setString("mqttUser", 32, "");
-				settingsOld->setString("mqttPassword", 64, "");
-				settingsOld->setString("mqttTopic", 64, "");
+				settingsOld->setString(PROP_IDX, 32, "");
+				settingsOld->setString(PROP_SSID, 64, "");
+				settingsOld->setString(PROP_PASSWORD, 32, "");
+				settingsOld->setByte(PROP_NETBITS1, (NETBITS1_MQTT | NETBITS1_HASS));
+				settingsOld->setString(PROP_MQTTSERVER, 32, "");
+				settingsOld->setString(PROP_MQTTPORT, 4, "1883");
+				settingsOld->setString(PROP_MQTTUSER, 32, "");
+				settingsOld->setString(PROP_MQTTPASSWORD, 64, "");
+				settingsOld->setString(PROP_MQTTTOPIC, 64, "");
 				if (settingsOld->getNetworkSettingsVersion()==NETWORKSETTINGS_PRE_109){
 					wlog->notice(F("Reading NetworkSettings PRE_109"));
 					settingsOld->setString("mqttStateTopic", 16, DEFAULT_TOPIC_STATE); // unused
@@ -1418,16 +1428,16 @@ private:
 		}
 
 		
-		this->idx = settings->setString("idx", 16,
-			(settingsOld && settingsOld->existsSetting("idx") ? settingsOld->getString("idx") : this->getClientName(true).c_str()));
-		this->ssid = settings->setString("ssid", 32, (settingsOld && settingsOld->existsSetting("ssid") ? settingsOld->getString("ssid") : ""));
-		settings->setString("password", 32, (settingsOld && settingsOld->existsSetting("password") ? settingsOld->getString("password") : ""));
-		this->netBits1 = settings->setByte("netbits1", (settingsOld && settingsOld->getByte("netbits1") ? settingsOld->getByte("netbits1") : (NETBITS1_MQTT | NETBITS1_HASS)));
-		settings->setString("mqttServer", 32, (settingsOld && settingsOld->existsSetting("mqttServer") ? settingsOld->getString("mqttServer") : ""));
-		settings->setString("mqttPort", 4, (settingsOld && settingsOld->existsSetting("mqttPort") ? settingsOld->getString("mqttPort") : "1883"));
-		settings->setString("mqttUser", 16, (settingsOld && settingsOld->existsSetting("mqttUser") ? settingsOld->getString("mqttUser") : ""));
-		settings->setString("mqttPassword", 32, (settingsOld && settingsOld->existsSetting("mqttPassword") ? settingsOld->getString("mqttPassword") : ""));
-		this->mqttBaseTopic = settings->setString("mqttTopic", 32, (settingsOld && settingsOld->existsSetting("mqttTopic") ? settingsOld->getString("mqttTopic") : getIdx()));
+		this->idx = settings->setString(PROP_IDX, 16,
+			(settingsOld && settingsOld->existsSetting(PROP_IDX) ? settingsOld->getString(PROP_IDX) : this->getClientName(true).c_str()));
+		this->ssid = settings->setString(PROP_SSID, 32, (settingsOld && settingsOld->existsSetting(PROP_SSID) ? settingsOld->getString(PROP_SSID) : ""));
+		settings->setString(PROP_PASSWORD, 32, (settingsOld && settingsOld->existsSetting(PROP_PASSWORD) ? settingsOld->getString(PROP_PASSWORD) : ""));
+		this->netBits1 = settings->setByte(PROP_NETBITS1, (settingsOld && settingsOld->getByte(PROP_NETBITS1) ? settingsOld->getByte(PROP_NETBITS1) : (NETBITS1_MQTT | NETBITS1_HASS)));
+		settings->setString(PROP_MQTTSERVER, 32, (settingsOld && settingsOld->existsSetting(PROP_MQTTSERVER) ? settingsOld->getString(PROP_MQTTSERVER) : ""));
+		settings->setString(PROP_MQTTPORT, 4, (settingsOld && settingsOld->existsSetting(PROP_MQTTPORT) ? settingsOld->getString(PROP_MQTTPORT) : "1883"));
+		settings->setString(PROP_MQTTUSER, 16, (settingsOld && settingsOld->existsSetting(PROP_MQTTUSER) ? settingsOld->getString(PROP_MQTTUSER) : ""));
+		settings->setString(PROP_MQTTPASSWORD, 32, (settingsOld && settingsOld->existsSetting(PROP_MQTTPASSWORD) ? settingsOld->getString(PROP_MQTTPASSWORD) : ""));
+		this->mqttBaseTopic = settings->setString(PROP_MQTTTOPIC, 32, (settingsOld && settingsOld->existsSetting(PROP_MQTTTOPIC) ? settingsOld->getString(PROP_MQTTTOPIC) : getIdx()));
 		this->mqttStateTopic = settings->setString("mqttStateTopic", 16, (settingsOld && settingsOld->existsSetting("mqttStateTopic") ? settingsOld->getString("mqttStateTopic") : DEFAULT_TOPIC_STATE)); // unused
 		this->mqttSetTopic = settings->setString("mqttSetTopic", 16, (settingsOld && settingsOld->existsSetting("mqttSetTopic") ? settingsOld->getString("mqttSetTopic") : DEFAULT_TOPIC_SET)); // unused
 
@@ -1512,7 +1522,7 @@ private:
 		WJson json(response);
 		json.beginObject();
 		if (device->isMainDevice()) {
-			json.propertyString("idx", getIdx());
+			json.propertyString(PROP_IDX, getIdx());
 			json.propertyString("ip", getDeviceIp().toString().c_str());
 			json.propertyString("firmware", firmwareVersion.c_str());
 		}
