@@ -229,6 +229,9 @@ const static char HTTP_CONFIG_SAVE_BUTTON[]         PROGMEM = R"=====(
 </form>
 )=====";
 
+
+const char* STR_BYTE PROGMEM = " Byte";
+
 void htmlTableRowTitle(AsyncResponseStream* page,  char const* title){
 	page->print(F("<tr><th>"));
 	page->print(title);

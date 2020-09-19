@@ -182,7 +182,7 @@ public:
 
     }
 
-    virtual void bindWebServerCalls(AsyncWebServerRequest *request, AsyncResponseStream* page) {
+    virtual void bindWebServerCalls(AsyncWebServer* webServer) {
 
     }
 

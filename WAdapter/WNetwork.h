@@ -24,9 +24,10 @@
 #include "WSettings.h"
 #include "WJsonParser.h"
 #include "WLog.h"
+#include "webserverHelper.h"
 
 #define SIZE_MQTT_PACKET 1536
-#define SIZE_JSON_PACKET 2048
+#define SIZE_JSON_PACKET 3096
 #define NO_LED -1
 const char* CONFIG_PASSWORD PROGMEM = "12345678";
 const char* APPLICATION_JSON PROGMEM = "application/json";
@@ -125,7 +126,7 @@ public:
 		});
 
 		this->updateRunning = false;
-		this->restartFlag = "";
+		this->restartFlag = nullptr;
 		this->networkLogActive = false;
 		this->connectFailCounter = 0;
 		this->apStartedAt = 0;
@@ -309,8 +310,8 @@ true ||
 #endif
 
 		//Restart required?
-		if (!restartFlag.equals("")) {
-			wlog->notice(F("Restart flag: '%s'"), restartFlag.c_str());
+		if (restartFlag!=nullptr) {
+			wlog->notice(F("Restart flag: '%s'"), restartFlag);
 			this->updateRunning = false;
 			stopWebServer();
 			delay(1000);
@@ -532,8 +533,12 @@ true ||
 						MDNS.addServiceTxt("http", "tcp", "webthing", "true");
 						wlog->notice(F("MDNS responder started at %s"), mdnsName.c_str());
 					}
-					webServer->on("/things", HTTP_GET, std::bind(&WNetwork::sendDevicesStructure, this));
-					webServer->on("/things/", HTTP_GET, std::bind(&WNetwork::sendDevicesStructure, this));
+					webServer->on("/things", HTTP_GET, [this](AsyncWebServerRequest *request){
+						sendDevicesStructure(request);
+					});
+					webServer->on("/things/", HTTP_GET, [this](AsyncWebServerRequest *request){
+						sendDevicesStructure(request);
+					});
 					WDevice *device = this->firstDevice;
 					while (device != nullptr) {
 						bindWebServerCallsNetwork(device);
@@ -690,8 +695,6 @@ true ||
 		AsyncWebSocket *webSocket = new AsyncWebSocket("/things/" + device->getId());
 		device->setWebSocket(webSocket);
 		*/
-		// started at startWebserver()
-		//bindWebServerCalls(device);
 	}
 
 	WLog* log() {
@@ -736,12 +739,12 @@ private:
 	THandlerFunction onConfigurationFinished;
 	THandlerReturnFunctionBool onMqttHassAutodiscover;
 	bool debug, updateRunning;
-	String restartFlag;
+	const __FlashStringHelper* restartFlag;
 	DNSServer *dnsApServer;
 	int networkState;
 	String applicationName;
 	String firmwareVersion;
-	const char* firmwareUpdateError;
+	const __FlashStringHelper* firmwareUpdateError;
 	WProperty *netBits1;
 	WProperty *supportingMqtt;
 	WProperty *supportingMqttHASS;
@@ -958,7 +961,7 @@ private:
 	void handleHttpRootRequest(AsyncWebServerRequest *request) {
 		wlog->notice(F("handleHttpRootRequest"));
 		if (isWebServerRunning()) {
-			if (restartFlag.equals("")) {			
+			if (restartFlag==nullptr) {			
 				AsyncResponseStream* page = httpHeader(request, "Main");
 				printHttpCaption(page);
 				WDevice *device = firstDevice;
@@ -986,7 +989,6 @@ private:
 				page->printf_P(HTTP_BUTTON, "reset", "post", "Reboot");
 				httpFooter(page);
 				request->send(page);
-				Serial.println("XXX");
 			} else {
 				AsyncResponseStream* page = httpHeader(request, "Info", F("<meta http-equiv=\"refresh\" content=\"10\">"));
 				page->print(restartFlag);
@@ -1076,25 +1078,24 @@ private:
 			// remove old autoconfiguration
 			sendMqttHassAutodiscover(true);
 #endif			
-
-			this->idx->setString(request->getParam("i")->value().c_str());
-			this->ssid->setString(request->getParam("s")->value().c_str());
-			settings->setString(PROP_PASSWORD,  (request->getParam("p")->value().equals(FORM_PW_NOCHANGE) ? getPassword() : request->getParam("p")->value().c_str())) ;
-			settings->setString(PROP_MQTTSERVER, request->getParam("ms")->value().c_str());
-			String mqtt_port = request->getParam("mo")->value();
+			this->idx->setString(getValueOrEmpty(request, "i").c_str());
+			this->ssid->setString(getValueOrEmpty(request, "s").c_str());
+			settings->setString(PROP_PASSWORD,  (getValueOrEmpty(request, "p").equals(FORM_PW_NOCHANGE) ? getPassword() : getValueOrEmpty(request, "p").c_str())) ;
+			settings->setString(PROP_MQTTSERVER, getValueOrEmpty(request, "ms").c_str());
+			String mqtt_port = getValueOrEmpty(request, "mo");
 			settings->setString(PROP_MQTTPORT, (mqtt_port != "" ? mqtt_port.c_str() : "1883"));
-			settings->setString(PROP_MQTTUSER, request->getParam("mu")->value().c_str());
-			settings->setString(PROP_MQTTPASSWORD,(request->getParam("mpF(")->value().equals(FORM_PW_NOCHANGE) ? getMqttPassword() : request->getParam(")mp")->value().c_str()));
-			this->mqttBaseTopic->setString(request->getParam("mt")->value().c_str());
+			settings->setString(PROP_MQTTUSER, getValueOrEmpty(request, "mu").c_str());
+			settings->setString(PROP_MQTTPASSWORD, getValueOrEmpty(request, "mp").equals(FORM_PW_NOCHANGE) ? getMqttPassword() : getValueOrEmpty(request, "mp").c_str());
+			this->mqttBaseTopic->setString(getValueOrEmpty(request, "mt").c_str());
 			byte nb1 = 0;
-			if (request->getParam(F("mq"))->value().c_str() == "true") nb1 |= NETBITS1_MQTT;
-			if (request->getParam(F("mqhass"))->value().c_str() == "true") nb1 |= NETBITS1_HASS;
-			if (request->getParam(F("apfb"))->value().c_str() == "true") nb1 |= NETBITS1_APFALLBACK;
-			if (request->getParam(F("mqsv"))->value().c_str() == "true") nb1 |= NETBITS1_MQTTSINGLEVALUES;
+			if (getValueOrEmpty(request, "mq").equals("true")) nb1 |= NETBITS1_MQTT;
+			if (getValueOrEmpty(request, "mqhass").equals("true")) nb1 |= NETBITS1_HASS;
+			if (getValueOrEmpty(request, "apfb").equals("true")) nb1 |= NETBITS1_APFALLBACK;
+			if (getValueOrEmpty(request, "mqsv").equals("true")) nb1 |= NETBITS1_MQTTSINGLEVALUES;
 			settings->setByte(PROP_NETBITS1, nb1);
 			wlog->notice(F("supportingMqtt set to: %d"), nb1);
 			settings->save(); 
-			this->restart(request, "Settings saved.");
+			this->restart(request, F("Settings saved."));
 			// we must not here this->supportingMqtt -> if it _was_ disabled and we're going to enable it here
 			// mqtt would not be initialized but would be used immediately
 		}
@@ -1106,11 +1107,10 @@ private:
 			device->saveConfigPage(request);
 			settings->save();
 			if (device->isConfigNeedsReboot()){
-				wlog->notice(F("Reboot "));
-				delay(300);
-				this->restart(request, "Device settings saved.");
+				wlog->notice(F("Reboot"));
+				this->restart(request, F("Device settings saved."));
 			} else {
-				this->webReturnStatusPage(request, "Device settings saved.", "");
+				this->webReturnStatusPage(request, F("Device settings saved."), "");
 			}
 			wlog->notice(F("handleHttpSaveDeviceConfiguration Done"));
 		}
@@ -1120,9 +1120,9 @@ private:
 		if (isWebServerRunning()) {
 			AsyncResponseStream* page = httpHeader(request, "Info");
 			printHttpCaption(page);
-			page->printf("<table>");
+			page->print(F("<table>"));
 			// header
-			page->printf("<tr><th colspan=\"2\"><h4>Main</h4></th></tr>");
+			page->print(F("<tr><th colspan=\"2\"><h4>Main</h4></th></tr>"));
 
 
 			htmlTableRowTitle(page, F("Chip ID:"));
@@ -1156,32 +1156,33 @@ private:
 
 			htmlTableRowTitle(page, F("Flash Chip size:"));
 			page->print(ESP.getFlashChipSize());
-			page->print(" kByte");
+			page->print(STR_BYTE);
 			htmlTableRowEnd(page);
 
 			htmlTableRowTitle(page, F("Current sketch size:"));
 			page->print(ESP.getSketchSize());
-			page->print(" kByte");
+			page->print(STR_BYTE);
 			htmlTableRowEnd(page);
 
 			htmlTableRowTitle(page, F("Available sketch size:"));
 			page->print(ESP.getFreeSketchSpace());
-			page->print(" kByte");
+			page->print(STR_BYTE);
 			htmlTableRowEnd(page);
 
 			htmlTableRowTitle(page, F("Free heap size:"));
 			page->print(ESP.getFreeHeap());
-			page->print(" kByte");
+			page->print(STR_BYTE);
 			htmlTableRowEnd(page);
 
 			htmlTableRowTitle(page, F("Largest free heap block:"));
 			page->print(ESP.getMaxFreeBlockSize());
-			page->print(" kByte");
+			page->print(STR_BYTE);
 			htmlTableRowEnd(page);
 
 			htmlTableRowTitle(page, F("Heap fragmentation:"));
 			page->print(ESP.getHeapFragmentation());
-			page->print(" %</td></tr>");
+			page->print(" %");
+			htmlTableRowEnd(page);
 			
 			htmlTableRowTitle(page, F("Uptime:"));
 			unsigned long secs=millis()/1000;
@@ -1193,20 +1194,20 @@ private:
 			secs -= minutes * 60;
 			page->printf_P("%dd, %dh, %dm, %ds",
 			days, hours, minutes, secs);
-			page->print("</td></tr>");
+			htmlTableRowEnd(page);
 
 			WDevice *device = this->firstDevice;
 			while (device != nullptr) {
 				if (device->hasInfoPage()){
-					page->print("<tr><th colspan=\"2\"><h4>");
+					page->print(F("<tr><th colspan=\"2\"><h4>"));
 					page->print(device->getName());
-					page->print("</h4></th></tr>");
-					//device->printInfoPage(page);
+					page->print(F("</h4></th></tr>"));
+					device->printInfoPage(page);
 				}
 				device = device->next;
 			}
-			page->print("</table>");	
-			page->print("<br/><br/>");			
+			page->print(F("</table>"));
+			page->print(F("<br/><br/>"));
 			page->print(FPSTR(HTTP_HOME_BUTTON));
 			httpFooter(page);
 			request->send(page);
@@ -1216,28 +1217,28 @@ private:
 	/** Handle the reset page */
 	void handleHttpReset(AsyncWebServerRequest *request) {
 		if (isWebServerRunning()) {
-			this->restart(request, "Resetting was caused manually by web interface. ");
+			this->restart(request, F("Resetting was caused manually by web interface. "));
 		}
 	}
 
 	void printHttpCaption(AsyncResponseStream* page) {
-		page->print("<h2>");
+		page->print(F("<h2>"));
 		page->print(applicationName);
 		page->print(" ");
 		page->print(firmwareVersion);
 		page->print(debug ? " (debug)" : "");
-		page->print("</h2>");
+		page->print(F("</h2>"));
 		if (getIdx()){
-			page->print("<h3>");
+			page->print(F("<h3>"));
 			page->print(getIdx());
-			page->print("</h3>");
+			page->print(F("</h3>"));
 		}
 
 	}
 
 	template<class T, typename ... Args> AsyncResponseStream * httpHeader(AsyncWebServerRequest *request, T title, const __FlashStringHelper * HeaderAdditional) {
 		if (!isWebServerRunning()) return nullptr;
-		AsyncResponseStream *page = request->beginResponseStream(TEXT_HTML);
+		AsyncResponseStream *page = request->beginResponseStream(TEXT_HTML, 3096U);
 		page->printf_P(HTTP_HEAD_BEGIN, getIdx(), title);
 		page->print(FPSTR(HTTP_SCRIPT));
 		page->print(FPSTR(HTTP_STYLE));
@@ -1287,9 +1288,9 @@ private:
 			AsyncResponseStream* page = httpHeader(request, F("Firmware update"));
 			printHttpCaption(page);
 			page->print(HTTP_FORM_FIRMWARE);
-			page->print("Available sketch size: ");
+			page->print(F("Available sketch size: "));
 			page->print(ESP.getFreeSketchSpace());
-			page->print(" kByte");
+			page->print(F(" kByte"));
 			page->print(HTTP_BODY_END);
 			httpFooter(page);
 			request->send(page);
@@ -1301,7 +1302,7 @@ private:
 			if (Update.hasError()) {
 				this->restart(request, firmwareUpdateError);
 			} else {
-				this->restart(request, "Update successful.");
+				this->restart(request, F("Update successful."));
 			}
 		}
 	}
@@ -1340,36 +1341,36 @@ private:
 		}
 	}
 
-	const char* getFirmwareUpdateErrorMessage() {
+	const __FlashStringHelper* getFirmwareUpdateErrorMessage() {
 		switch (Update.getError()) {
 		case UPDATE_ERROR_OK:
-			return "No Error";
+			return F("No Error");
 		case UPDATE_ERROR_WRITE:
-			return "Flash Write Failed";
+			return F("Flash Write Failed");
 		case UPDATE_ERROR_ERASE:
-			return "Flash Erase Failed";
+			return F("Flash Erase Failed");
 		case UPDATE_ERROR_READ:
-			return "Flash Read Failed";
+			return F("Flash Read Failed");
 		case UPDATE_ERROR_SPACE:
-			return "Not Enough Space";
+			return F("Not Enough Space");
 		case UPDATE_ERROR_SIZE:
-			return "Bad Size Given";
+			return F("Bad Size Given");
 		case UPDATE_ERROR_STREAM:
-			return "Stream Read Timeout";
+			return F("Stream Read Timeout");
 		case UPDATE_ERROR_MD5:
-			return "MD5 Failed: ";
+			return F("MD5 Failed: ");
 		case UPDATE_ERROR_SIGN:
-			return "Signature verification failed";
+			return F("Signature verification failed");
 		case UPDATE_ERROR_FLASH_CONFIG:
-			return "Flash config wrong.";
+			return F("Flash config wrong.");
 		case UPDATE_ERROR_NEW_FLASH_CONFIG:
-			return "New Flash config wrong.";
+			return F("New Flash config wrong.");
 		case UPDATE_ERROR_MAGIC_BYTE:
-			return "Magic byte is wrong, not 0xE9";
+			return F("Magic byte is wrong, not 0xE9");
 		case UPDATE_ERROR_BOOTSTRAP:
-			return "Invalid bootstrapping state, reset ESP8266 before updating";
+			return F("Invalid bootstrapping state, reset ESP8266 before updating");
 		default:
-			return "UNKNOWN";
+			return F("UNKNOWN");
 		}
 	}
 
@@ -1379,16 +1380,16 @@ private:
 		wlog->notice(s.c_str());
 	}
 
-	void webReturnStatusPage(AsyncWebServerRequest *request, const char* reasonMessage1, const char* reasonMessage2) {
+	void webReturnStatusPage(AsyncWebServerRequest *request, const __FlashStringHelper* reasonMessage1, const char* reasonMessage2) {
 		AsyncResponseStream* page = httpHeader(request, reasonMessage1);
 		printHttpCaption(page);
 		page->printf_P(HTTP_SAVED, reasonMessage1, reasonMessage2);
-		page->print(HTTP_HOME_BUTTON);
+		page->printf_P(HTTP_HOME_BUTTON);
 		httpFooter(page);
 		request->send(page);
-			}
+	}
 	
-	void restart(AsyncWebServerRequest *request, const char* reasonMessage) {
+	void restart(AsyncWebServerRequest *request, const __FlashStringHelper* reasonMessage) {
 		this->restartFlag = reasonMessage;
 		webReturnStatusPage(request, reasonMessage, "ESP reboots now...");
 	}
@@ -1492,7 +1493,7 @@ private:
 		request->send(404, "text/plain", "404: Not found");
 	}
 
-	void sendDevicesStructure() {
+	void sendDevicesStructure(AsyncWebServerRequest* request) {
 		wlog->notice(F("Send description for all devices... "));
 		WStringStream* response = getResponseStream();
 		WJson json(response);
@@ -1505,18 +1506,21 @@ private:
 			device = device->next;
 		}
 		json.endArray();
-		//FIXMEwebServer->send(200, APPLICATION_JSON, response->c_str());
+		request->send(200, APPLICATION_JSON, response->c_str());
+		wlog->notice(F("DONE"));
+		delete response;
 	}
 
-	void sendDeviceStructure(WDevice *&device) {
+	void sendDeviceStructure(AsyncWebServerRequest *request, WDevice *device) {
 		wlog->notice(F("Send description for device: %s"), device->getId());
 		WStringStream* response = getResponseStream();
 		WJson json(response);
 		device->toJsonStructure(&json, "", WEBTHING);
-		//FIXMEwebServer->send(200, APPLICATION_JSON, response->c_str());
+		request->send(200, APPLICATION_JSON, response->c_str());
+		delete response;
 	}
 
-	void sendDeviceValues(WDevice *&device) {
+	void sendDeviceValues(AsyncWebServerRequest *request, WDevice *device) {
 		wlog->notice(F("Send all properties for device: "), device->getId());
 		WStringStream* response = getResponseStream();
 		WJson json(response);
@@ -1528,7 +1532,8 @@ private:
 		}
 		device->toJsonValues(&json, WEBTHING);
 		json.endObject();
-		//FIXMEwebServer->send(200, APPLICATION_JSON, response->c_str());
+		request->send(200, APPLICATION_JSON, response->c_str());
+		delete response;
 	}
 
 #ifndef MINIMAL
@@ -1558,7 +1563,7 @@ private:
 	}
 #endif
 
-	void getPropertyValue(WProperty *property) {
+	void getPropertyValue(AsyncWebServerRequest *request, WProperty *property) {
 		WStringStream* response = getResponseStream();
 		WJson json(response);
 		json.beginObject();
@@ -1570,30 +1575,27 @@ private:
 
 	}
 
-	void setPropertyValue(WDevice *device) {
-		//FIXME
-		#if 0
-		if (webServer->hasArg("plain") == false) {
-			webServer->send(422);
+	void setPropertyValue(AsyncWebServerRequest *request, WDevice *device) {
+		if (request->hasArg("plain") == false) {
+			request->send(422); // Unprocessable Entity
 			return;
 		}
 		WJsonParser parser;
-		WProperty* property = parser.parse(webServer->arg("plain").c_str(), device);
+		WProperty* property = parser.parse(request->getParam("plain")->value().c_str(), device);
 		if (property != nullptr) {
 			//response new value
-			wlog->notice(F("Set property value: %s (web request) %s"), property->getId(), webServer->arg("plain").c_str());
+			wlog->notice(F("Set property value: %s (web request) %s"), property->getId(), request->getParam("plain")->value().c_str());
 			WStringStream* response = getResponseStream();
 			WJson json(response);
 			json.beginObject();
 			property->toJsonValue(&json);
 			json.endObject();
-			webServer->send(200, APPLICATION_JSON, response->c_str());
+			request->send(200, APPLICATION_JSON, response->c_str());
 		} else {
 			// unable to parse json
-			wlog->notice(F("unable to parse json: %s"), webServer->arg("plain").c_str());
-			webServer->send(500);
+			wlog->notice(F("unable to parse json: %s"), request->getParam("plain")->value().c_str());
+			request->send(500);
 		}
-		#endif
 	}
 
 	void sendErrorMsg(int status, const char *msg) {
@@ -1610,25 +1612,32 @@ private:
 	}
 
 	void bindWebServerCallsNetwork(WDevice *device) {
-		//FIXME
-		#if 0
 		wlog->notice(F("Bind webServer calls for device %s"), device->getId());
 		String deviceBase("/things/");
 		deviceBase.concat(device->getId());
+		#if 0
 		WProperty *property = device->firstProperty;
 		while (property != nullptr) {
 			if (property->isVisible(WEBTHING)) {
 				String propertyBase = deviceBase + "/properties/" + property->getId();
-				webServer->on(propertyBase.c_str(), HTTP_GET, getPropertyValue(property));
-				webServer->on(propertyBase.c_str(), HTTP_PUT, setPropertyValue(device));
+				webServer->on(propertyBase.c_str(), HTTP_GET, [this, property](AsyncWebServerRequest *request){
+					getPropertyValue(request, property);
+				});
+				webServer->on(propertyBase.c_str(), HTTP_PUT, [this, device](AsyncWebServerRequest *request){
+					setPropertyValue(request, device);
+				});
 			}
 			property = property->next;
 		}
-		String propertiesBase = deviceBase + "/properties";
-		webServer->on(propertiesBase.c_str(), HTTP_GET,	sendDeviceValues(device));
-		webServer->on(deviceBase.c_str(), HTTP_GET,	sendDeviceStructure(device));
-		device->bindWebServerCalls(webServer);
 		#endif
+		String propertiesBase = deviceBase + "/properties";
+		webServer->on(propertiesBase.c_str(), HTTP_GET,	[this, device](AsyncWebServerRequest *request){
+			sendDeviceValues(request, device);
+		});
+		webServer->on(deviceBase.c_str(), HTTP_GET,	[this, device](AsyncWebServerRequest *request){
+			sendDeviceStructure(request, device);
+		});
+		device->bindWebServerCalls(webServer);
 	}
 
 	WDevice* getDeviceById(const char* deviceId) {
