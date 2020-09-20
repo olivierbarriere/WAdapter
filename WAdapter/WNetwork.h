@@ -433,80 +433,91 @@ true ||
 			handleUnknown(request);
 		});
 		//if ((WiFi.status() != WL_CONNECTED) || (!this->isSupportingWebThing())) {
-		webServer->on("/", HTTP_GET, [this](AsyncWebServerRequest *request){
-			handleHttpRootRequest(request);
-		});
-		webServer->on("/config", HTTP_GET, [this](AsyncWebServerRequest *request){
-			handleHttpRootRequest(request);
-		});
-		// Android Captive Portal Detection
-		webServer->on("/generate_204",  [this](AsyncWebServerRequest *request){
-			handleHttpRootRequest(request);
-		});
-		// Apple Captive Portal Detection
-		webServer->on("/hotspot-detect.html", [this](AsyncWebServerRequest *request){
-			handleHttpRootRequest(request);
-		});
 
-		WDevice *device = this->firstDevice;
-		while (device != nullptr) {
-			String did("/");
-			did.concat(device->getId());
-			String deviceConfiguration("/saveConfiguration");
-			deviceConfiguration.concat(device->getId());
-			if (device->isProvidingConfigPage()) {
-				webServer->on(did.c_str(), HTTP_GET, [this, device](AsyncWebServerRequest *request){
-					handleHttpDeviceConfiguration(request, device);
-				});
-				webServer->on(deviceConfiguration.c_str(), HTTP_GET, [this, device](AsyncWebServerRequest *request){
-					handleHttpSaveDeviceConfiguration(request, device);
-				});
-			}
-			WPage *subpage = device->firstPage;
-			while (subpage != nullptr) {
-				String didSub("");
-				didSub.concat(did);
-				didSub.concat("_");
-				didSub.concat(subpage->getId());
-
-				String deviceConfigurationSub("");
-				deviceConfigurationSub.concat(deviceConfiguration);
-				deviceConfigurationSub.concat("_");
-				deviceConfigurationSub.concat(subpage->getId());
-				webServer->on(didSub.c_str(), HTTP_GET, [this, device, subpage](AsyncWebServerRequest *request){
-					handleHttpDevicePage(request, device, subpage);
-				});
-				webServer->on(deviceConfigurationSub.c_str(), HTTP_GET, [this, device, subpage](AsyncWebServerRequest *request){
-					handleHttpDevicePageSubmitted(request, device, subpage);
-				});
-				subpage = subpage->next;
-			}
-			device = device->next;
-		}
-		webServer->on("/wifi", HTTP_GET, [this, device](AsyncWebServerRequest *request){
+		// every webServer->on requests 144 Byte of Heap - so save heap
+		webServer->on("", HTTP_GET, [this](AsyncWebServerRequest *request){
+			String url=request->url();
+			wlog->notice(F("Serving: %s"), url.c_str());
+			if (url.equals("") || 
+			url.equals(F("/")) || 
+			// Android Captive Portal Detection
+			url.equals(F("/generate_204")) || 
+			// Apple Captive Portal Detection
+			url.equals(F("/hotspot-detect.html"))){
+				request->redirect(F("/config"));
+			} else if (url.equals(F("/config")) || url.equals(F("/config/"))){
+				handleHttpRootRequest(request);
+			} else if (url.equals(F("/wifi"))){
 				handleHttpNetworkConfiguration(request);
-		});
-		webServer->on("/saveConfiguration", HTTP_GET, [this, device](AsyncWebServerRequest *request){
-				handleHttpSaveConfiguration(request);
-		});
-		webServer->on("/info", HTTP_GET, [this, device](AsyncWebServerRequest *request){
+			} else if (url.equals(F("/save"))){
+				handleHttpsave(request);
+			} else if (url.equals(F("/info"))){
 				handleHttpInfo(request);
-		});
-		webServer->on("/reset", HTTP_ANY, [this, device](AsyncWebServerRequest *request){
+			} else if (url.equals(F("/reset"))){
 				handleHttpReset(request);
-		});
-
-		//firmware update
-		webServer->on("/firmware", HTTP_GET, [this, device](AsyncWebServerRequest *request){
+			} else if (url.equals(F("/firmware"))){
 				handleHttpFirmwareUpdate(request);
+			} else if (url.equals(F("/css"))){
+				request->send(200, F("text/css"), PAGE_CSS);
+			} else if (url.equals(F("/js"))){
+				request->send(200, F("text/javascript"), PAGE_JS);
+			} else {
+				bool handled=false;
+				WDevice *device = this->firstDevice;
+				while (device != nullptr) {
+					String did("/");
+					did.concat(device->getId());
+					String saveDid(F("/save_"));
+					saveDid.concat(device->getId());
+					if (url.equals(did)){
+						handleHttpDeviceConfiguration(request, device);
+						handled=true;
+						break;
+					} else if (url.equals(saveDid)){
+						handleHttpSaveDeviceConfiguration(request, device);
+						handled=true;
+						break;
+					}
+					if (url.startsWith(did) or url.startsWith(saveDid)){
+						WPage *subpage = device->firstPage;
+						while (subpage != nullptr) {
+							String didSub(did);
+							didSub.concat("_");
+							didSub.concat(subpage->getId());
+							String saveDidSub(F("/save_"));
+							saveDidSub.concat(did);
+							saveDidSub.concat("_");
+							saveDidSub.concat(subpage->getId());
+							Serial.printf("X: %s   %s\n", did.c_str(), saveDid.c_str());
+							if (url.equals(didSub)){
+								Serial.printf("MATCH\n");
+								handleHttpDevicePage(request, device, subpage);
+								handled=true;
+								break;
+							}
+							if (url.equals(saveDidSub)){
+								Serial.printf("MATCH2\n");
+								handleHttpDevicePageSubmitted(request, device, subpage);
+								handled=true;
+								break;
+							}
+							subpage = subpage->next;
+						}
+						if (handled) break; // why has c no break(2)
+					}
+					device = device->next;
+				}
+				if (!handled){
+					handleUnknown(request);
+				}
+			}
 		});
-		webServer->on("/firmware", HTTP_POST, [this, device](AsyncWebServerRequest *request){
-				handleHttpFirmwareUpdateFinished(request);
-				handleHttpFirmwareUpdateProgress(request);
+		webServer->on("/firmware", HTTP_POST, [this](AsyncWebServerRequest *request){
+			handleHttpFirmwareUpdateFinished(request);
+		}, [this](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
+			handleHttpFirmwareUpdateProgress(request, filename, index, data, len, final);
 		});
-
-
-		webServer->on("/ws", HTTP_GET, [this, device](AsyncWebServerRequest *request){
+		webServer->on("/ws", HTTP_GET, [this](AsyncWebServerRequest *request){
 				std::bind(&WNetwork::handleWebSocket, this);
 		});
 
@@ -1072,7 +1083,7 @@ private:
 					}
 	}
 
-	void handleHttpSaveConfiguration(AsyncWebServerRequest *request) {
+	void handleHttpsave(AsyncWebServerRequest *request) {
 		if (isWebServerRunning()) {
 #ifndef MINIMAL
 			// remove old autoconfiguration
@@ -1240,8 +1251,8 @@ private:
 		if (!isWebServerRunning()) return nullptr;
 		AsyncResponseStream *page = request->beginResponseStream(TEXT_HTML, 3096U);
 		page->printf_P(HTTP_HEAD_BEGIN, getIdx(), title);
-		page->print(FPSTR(HTTP_SCRIPT));
-		page->print(FPSTR(HTTP_STYLE));
+		page->print(FPSTR(HTTP_HEAD_SCRIPT));
+		page->print(FPSTR(HTTP_HEAD_STYLE));
 		if (HeaderAdditional!=nullptr) page->print(FPSTR(HeaderAdditional));
 		page->print(FPSTR(HTTP_HEAD_END));
 		return page;
@@ -1287,11 +1298,11 @@ private:
 		if (isWebServerRunning()) {
 			AsyncResponseStream* page = httpHeader(request, F("Firmware update"));
 			printHttpCaption(page);
-			page->print(HTTP_FORM_FIRMWARE);
+			page->printf_P(HTTP_FORM_FIRMWARE);
 			page->print(F("Available sketch size: "));
 			page->print(ESP.getFreeSketchSpace());
-			page->print(F(" kByte"));
-			page->print(HTTP_BODY_END);
+			page->print(STR_BYTE);
+			page->printf_P(HTTP_BODY_END);
 			httpFooter(page);
 			request->send(page);
 					}
@@ -1307,37 +1318,34 @@ private:
 		}
 	}
 
-	void handleHttpFirmwareUpdateProgress(AsyncWebServerRequest *request) {
-		if (isWebServerRunning()) {
-#ifdef XXXXXXXXXXXX
-			HTTPUpload& upload = webServer->upload();
-			//Start firmwareUpdate
-			this->updateRunning = true;
+	void handleHttpFirmwareUpdateProgress(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+		//Start firmwareUpdate
+		this->updateRunning = true;
 #ifndef MINIMAL
-			//Close existing MQTT connections
-			this->disconnectMqtt();
+		//Close existing MQTT connections
+		this->disconnectMqtt();
 #endif
 
-			if (upload.status == UPLOAD_FILE_START){
-				firmwareUpdateError = "";
-				unsigned long free_space = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
-				wlog->notice(F("Update starting: %s"), upload.filename.c_str());
-				//Update.runAsync(true);
-				if (!Update.begin(free_space)) {
-					setFirmwareUpdateError("Can't start update (" + String(free_space) + "): ");
-				}
-			} else if (upload.status == UPLOAD_FILE_WRITE) {
-				if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
-					setFirmwareUpdateError("Can't upload file: ");
-				}
-			} else if (upload.status == UPLOAD_FILE_END) {
-				if (Update.end(true)) { //true to set the size to the current progress
-					wlog->notice(F("Update complete: "));
-				} else {
-					setFirmwareUpdateError("Can't finish update: ");
-				}
+		if (!index){
+			firmwareUpdateError = nullptr;
+			unsigned long free_space = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
+			wlog->notice(F("Update starting: %s"), filename.c_str());
+			Update.runAsync(true);
+			if (!Update.begin(free_space)) {
+				setFirmwareUpdateError("Can't start update (" + String(free_space) + "): ");
 			}
-#endif
+		}
+		if(!Update.hasError()){
+			if(Update.write(data, len) != len){
+				setFirmwareUpdateError("Can't upload file: ");
+			}
+		}
+		if (final){
+			if (Update.end(true)) { //true to set the size to the current progress
+				wlog->notice(F("Update complete: "));
+			} else {
+				setFirmwareUpdateError("Can't finish update: ");
+			}
 		}
 	}
 

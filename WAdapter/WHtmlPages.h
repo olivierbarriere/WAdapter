@@ -19,7 +19,24 @@ const static char HTTP_HEAD_BEGIN[]         PROGMEM = R"=====(<!DOCTYPE html>
 		<title>%s - %s</title>
 )=====";
 
-const static char HTTP_STYLE[]              PROGMEM = R"=====(<style>
+const static char HTTP_HEAD_STYLE[]              PROGMEM = "<link rel=\"stylesheet\" href=\"/css\" />";
+
+const static char HTTP_HEAD_SCRIPT[]             PROGMEM = "<script src=\"/js\"></script>";
+
+const static char HTTP_HEAD_END[]           PROGMEM = R"=====(
+	</head>
+	<body>
+		<div id='bodyDiv'>
+)=====";
+
+const static char HTTP_BODY_END[]           PROGMEM = R"=====(
+		</div>
+	</body>
+</html>
+)=====";
+
+
+const static char PAGE_CSS[]           PROGMEM = R"=====(
 body{
 	text-align: center;
 	font-family: arial, sans-serif;
@@ -63,36 +80,31 @@ button{
 .settingstable input[type='text']{
 	width: 40px;
 }
-</style>
 )=====";
 
-const static char HTTP_SCRIPT[]             PROGMEM = R"=====(<script>
-	function eb(s) {
-		return document.getElementById(s);
+const static char PAGE_JS[]           PROGMEM = R"=====(
+function eb(s) {
+	return document.getElementById(s);
+}
+function qs(s) {
+	return document.querySelector(s);
+}
+function sp(i) {
+	eb(i).type = (eb(i).type === 'text' ? 'password' : 'text');
+}
+function c(l){
+	eb('s').value=l.innerText||l.textContent;
+	eb('p').focus();
+}
+function hideMqttGroup() {
+	var cb = eb('mqttEnabled'); 
+	var x = eb('mqttGroup');
+	if (cb.checked) {
+		x.style.display = 'block';
+	} else {
+		x.style.display = 'none';
 	}
-	function qs(s) {
-		return document.querySelector(s);
-	}
-	function sp(i) {
-		eb(i).type = (eb(i).type === 'text' ? 'password' : 'text');
-	}
-	function c(l){
-		eb('s').value=l.innerText||l.textContent;
-		eb('p').focus();
-	}
-</script>
-)=====";
-
-const static char HTTP_HEAD_END[]           PROGMEM = R"=====(
-	</head>
-	<body>
-		<div id='bodyDiv'>
-)=====";
-
-const static char HTTP_BODY_END[]           PROGMEM = R"=====(
-		</div>
-	</body>
-</html>
+}
 )=====";
 
 const static char HTTP_BUTTON[]    PROGMEM = R"=====(
@@ -119,17 +131,6 @@ const static char HTTP_PAGE_CONFIGURATION_MQTT_BEGIN[]    PROGMEM = R"=====(
 
 const static char HTTP_PAGE_CONFIGURATION_MQTT_END[]    PROGMEM = R"=====(
 	</div>
-	<script>
-		function hideMqttGroup() {
-			var cb = eb('mqttEnabled'); 
-			var x = eb('mqttGroup');
-			if (cb.checked) {
-				x.style.display = 'block';
-			} else {
-				x.style.display = 'none';
-			}
-		}
-	</script>
 )=====";
 
 const static char HTTP_PAGE_CONFIGURATION_OPTION[]    PROGMEM = R"=====(
@@ -175,7 +176,7 @@ const static char HTTP_FORM_FIRMWARE[] PROGMEM = R"=====(
 )=====";
 
 const static char HTTP_CONFIG_PAGE_BEGIN[]         PROGMEM = R"=====(
-<form method='get' action='saveConfiguration%s'>
+<form method='get' action='save_%s'>
 )=====";
 
 const static char HTTP_TEXT_FIELD[]    PROGMEM = R"=====(
