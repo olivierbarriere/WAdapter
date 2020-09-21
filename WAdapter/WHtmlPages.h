@@ -35,7 +35,6 @@ const static char HTTP_BODY_END[]           PROGMEM = R"=====(
 </html>
 )=====";
 
-
 const static char PAGE_CSS[]           PROGMEM = R"=====(
 body{
 	text-align: center;
@@ -49,7 +48,7 @@ body{
 div{
 	background-color:white;
 	color:black;
-	border:1.0rem
+	border:1.0rem;
 	border-color:black;
 	border-radius:0.3rem;
 	background-size: 1em;
@@ -62,7 +61,6 @@ select,
 button{
 	width: 300px;
 }
-
 button{
 	border:0;
 	border-radius:0.3rem;

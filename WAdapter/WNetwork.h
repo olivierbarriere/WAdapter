@@ -31,8 +31,35 @@
 #define NO_LED -1
 const char* CONFIG_PASSWORD PROGMEM = "12345678";
 const char* APPLICATION_JSON PROGMEM = "application/json";
-const char* TEXT_HTML PROGMEM = "text/html";
-const char* TEXT_PLAIN PROGMEM = "text/plain";
+const char* CT_TEXT_HTML PROGMEM = "text/html";
+const char* CT_TEXT_PLAIN PROGMEM = "text/plain";
+const char* CT_TEXT_CSS PROGMEM = "text/css";
+const char* CT_TEXT_JS PROGMEM = "text/javascript";
+
+const char* URI_SEP = "/";
+const char* URI_CONFIG PROGMEM = "/config";
+const char* URI_WIFI PROGMEM = "/wifi";
+const char* URI_SAVE PROGMEM = "/save";
+const char* URI_SAVE_SUB PROGMEM = "/save_";
+const char* URI_INFO PROGMEM = "/info";
+const char* URI_RESET PROGMEM = "/reset";
+const char* URI_FIRMWARE PROGMEM = "/firmware";
+const char* URI_CSS PROGMEM = "/css";
+const char* URI_JS PROGMEM = "/js";
+
+const char* URI_PROPERTIES PROGMEM = "/properties";
+const char* URI_THINGS PROGMEM = "/things";
+
+unsigned int httpPort = 80;
+
+const char* STR_HTTP PROGMEM = "http";
+const char* STR_TCP PROGMEM = "tcp";
+const char* STR_URL PROGMEM = "url";
+const char* STR_WEBTHING PROGMEM = "webthing";
+const char* STR_TRUE PROGMEM = "true";
+const char* STR_FALSE PROGMEM = "false";
+
+const char* PARAM_PLAIN PROGMEM = "plain";
 
 const char* DEFAULT_TOPIC_STATE PROGMEM = "properties";
 const char* DEFAULT_TOPIC_SET PROGMEM = "set";
@@ -394,7 +421,7 @@ true ||
 
 	bool publishMqtt(const char* topic, const char* key, const char* value, const char* key2=nullptr, const char* value2=nullptr, bool retained=false) {
 		if (this->isSupportingMqtt()) {
-			WStringStream* response = getResponseStream();
+			WStringStream* response = getMQTTResponseStream();
 			WJson json(response);
 			json.beginObject();
 			json.propertyString(key, value);
@@ -427,96 +454,115 @@ true ||
 			statusLed = nullptr;
 		}
 
-		this->webServer = new AsyncWebServer(80);
+		this->webServer = new AsyncWebServer(httpPort);
 
 		webServer->onNotFound([this](AsyncWebServerRequest *request){
 			handleUnknown(request);
 		});
 		//if ((WiFi.status() != WL_CONNECTED) || (!this->isSupportingWebThing())) {
 
-		// every webServer->on requests 144 Byte of Heap - so save heap
-		webServer->on("", HTTP_GET, [this](AsyncWebServerRequest *request){
-			String url=request->url();
-			wlog->notice(F("Serving: %s"), url.c_str());
-			if (url.equals("") || 
-			url.equals(F("/")) || 
-			// Android Captive Portal Detection
-			url.equals(F("/generate_204")) || 
-			// Apple Captive Portal Detection
-			url.equals(F("/hotspot-detect.html"))){
-				request->redirect(F("/config"));
-			} else if (url.equals(F("/config")) || url.equals(F("/config/"))){
-				handleHttpRootRequest(request);
-			} else if (url.equals(F("/wifi"))){
-				handleHttpNetworkConfiguration(request);
-			} else if (url.equals(F("/save"))){
-				handleHttpsave(request);
-			} else if (url.equals(F("/info"))){
-				handleHttpInfo(request);
-			} else if (url.equals(F("/reset"))){
-				handleHttpReset(request);
-			} else if (url.equals(F("/firmware"))){
-				handleHttpFirmwareUpdate(request);
-			} else if (url.equals(F("/css"))){
-				request->send(200, F("text/css"), PAGE_CSS);
-			} else if (url.equals(F("/js"))){
-				request->send(200, F("text/javascript"), PAGE_JS);
-			} else {
-				bool handled=false;
-				WDevice *device = this->firstDevice;
-				while (device != nullptr) {
-					String did("/");
-					did.concat(device->getId());
-					String saveDid(F("/save_"));
-					saveDid.concat(device->getId());
-					if (url.equals(did)){
-						handleHttpDeviceConfiguration(request, device);
-						handled=true;
-						break;
-					} else if (url.equals(saveDid)){
-						handleHttpSaveDeviceConfiguration(request, device);
-						handled=true;
-						break;
-					}
-					if (url.startsWith(did) or url.startsWith(saveDid)){
-						WPage *subpage = device->firstPage;
-						while (subpage != nullptr) {
-							String didSub(did);
-							didSub.concat("_");
-							didSub.concat(subpage->getId());
-							String saveDidSub(F("/save_"));
-							saveDidSub.concat(did);
-							saveDidSub.concat("_");
-							saveDidSub.concat(subpage->getId());
-							Serial.printf("X: %s   %s\n", did.c_str(), saveDid.c_str());
-							if (url.equals(didSub)){
-								Serial.printf("MATCH\n");
-								handleHttpDevicePage(request, device, subpage);
-								handled=true;
-								break;
-							}
-							if (url.equals(saveDidSub)){
-								Serial.printf("MATCH2\n");
-								handleHttpDevicePageSubmitted(request, device, subpage);
-								handled=true;
-								break;
-							}
-							subpage = subpage->next;
-						}
-						if (handled) break; // why has c no break(2)
-					}
-					device = device->next;
-				}
-				if (!handled){
-					handleUnknown(request);
-				}
-			}
-		});
-		webServer->on("/firmware", HTTP_POST, [this](AsyncWebServerRequest *request){
+		webServer->on(URI_FIRMWARE, HTTP_POST, [this](AsyncWebServerRequest *request){
 			handleHttpFirmwareUpdateFinished(request);
 		}, [this](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
 			handleHttpFirmwareUpdateProgress(request, filename, index, data, len, final);
 		});
+
+		// every webServer->on requests 144 Byte of Heap - so save heap
+		webServer->on("", HTTP_GET | HTTP_POST | HTTP_PUT, [this](AsyncWebServerRequest *request){
+			String url=request->url();
+			wlog->notice(F("Serving: '%s', method %d"), url.c_str(), request->method());
+			bool handled=true;
+			if (request->method()==HTTP_GET){
+				if (url.equals("") || 
+				url.equals(F("/")) || 
+				// Android Captive Portal Detection
+				url.equals(F("/generate_204")) || 
+				// Apple Captive Portal Detection
+				url.equals(F("/hotspot-detect.html"))){
+					request->redirect(URI_CONFIG);
+				} else if (url.equals(URI_CONFIG) || url.equals(((String)URI_CONFIG) + "/")){
+					handleHttpRootRequest(request);
+				} else if (url.equals(URI_WIFI)){
+					handleHttpNetworkConfiguration(request);
+				} else if (url.equals(URI_SAVE)){
+					handleHttpsave(request);
+				} else if (url.equals(URI_INFO)){
+					handleHttpInfo(request);
+				} else if (url.equals(URI_RESET)){
+					handleHttpReset(request);
+				} else if (url.equals(URI_FIRMWARE)){
+					handleHttpFirmwareUpdate(request);
+				} else if (url.equals(URI_CSS)){
+					request->send_P(200, CT_TEXT_CSS, PAGE_CSS);
+				} else if (url.equals(URI_JS)){
+					request->send_P(200, CT_TEXT_JS, PAGE_JS);
+				} else if (url.startsWith(URI_THINGS)){
+					handleThings(request);
+				} else {
+					handled=false;
+					WDevice *device = this->firstDevice;
+					while (device != nullptr) {
+						String did("/");
+						did.concat(device->getId());
+						String saveDid(URI_SAVE_SUB);
+						saveDid.concat(device->getId());
+						if (url.equals(did)){
+							handleHttpDeviceConfiguration(request, device);
+							handled=true;
+							break;
+						} else if (url.equals(saveDid)){
+							handleHttpSaveDeviceConfiguration(request, device);
+							handled=true;
+							break;
+						}
+						if (url.startsWith(did) or url.startsWith(saveDid)){
+							WPage *subpage = device->firstPage;
+							while (subpage != nullptr) {
+								String didSub(did);
+								didSub.concat("_");
+								didSub.concat(subpage->getId());
+								String saveDidSub(URI_SAVE_SUB);
+								saveDidSub.concat(did);
+								saveDidSub.concat("_");
+								saveDidSub.concat(subpage->getId());
+								if (url.equals(didSub)){
+									handleHttpDevicePage(request, device, subpage);
+									handled=true;
+									break;
+								}
+								if (url.equals(saveDidSub)){
+									handleHttpDevicePageSubmitted(request, device, subpage);
+									handled=true;
+									break;
+								}
+								subpage = subpage->next;
+							}
+							if (handled) break; // why has c no break(2)
+						}
+						device = device->next;
+					}
+
+				}
+			} else if (request->method()==HTTP_POST){
+				if (url.equals(URI_FIRMWARE)){
+					// noop - already handled above
+				} else {
+					handled=false;
+				}
+			} else if (request->method()==HTTP_PUT){
+				if (url.startsWith(URI_THINGS)){
+					handleThings(request);
+				} else {
+					handled=false;
+				}
+			}
+			if (!handled){
+				handleUnknown(request);
+			}
+			wlog->notice(F("Serving: '%s' DONE"), url.c_str(), request->method());
+		});
+
+
 		webServer->on("/ws", HTTP_GET, [this](AsyncWebServerRequest *request){
 				std::bind(&WNetwork::handleWebSocket, this);
 		});
@@ -539,21 +585,10 @@ true ||
 					MDNS.end();
 					if (MDNS.begin(mdnsName)) {
 						wlog->notice(F("MDNS OK"));
-						MDNS.addService("http", "tcp", 80);
-						MDNS.addServiceTxt("http", "tcp", "url", "http://" + mdnsName + "/things");
-						MDNS.addServiceTxt("http", "tcp", "webthing", "true");
+						MDNS.addService(STR_HTTP, STR_TCP, httpPort);
+						MDNS.addServiceTxt(STR_HTTP, STR_TCP, STR_URL, (String)STR_HTTP + "://" + mdnsName + (String)URI_THINGS);
+						MDNS.addServiceTxt(STR_HTTP, STR_TCP, STR_WEBTHING, STR_TRUE);
 						wlog->notice(F("MDNS responder started at %s"), mdnsName.c_str());
-					}
-					webServer->on("/things", HTTP_GET, [this](AsyncWebServerRequest *request){
-						sendDevicesStructure(request);
-					});
-					webServer->on("/things/", HTTP_GET, [this](AsyncWebServerRequest *request){
-						sendDevicesStructure(request);
-					});
-					WDevice *device = this->firstDevice;
-					while (device != nullptr) {
-						bindWebServerCallsNetwork(device);
-						device = device->next;
 					}
 				}
 		#endif
@@ -712,11 +747,15 @@ true ||
 		return wlog;
 	}
 
-	WStringStream* getResponseStream() {
+	WStringStream* getMQTTResponseStream() {
 		if (responseStream == nullptr) {
-			responseStream = new WStringStream(SIZE_JSON_PACKET);
+			responseStream = new WStringStream(SIZE_MQTT_PACKET);
 		}
-		responseStream->flush();
+		if (responseStream == nullptr){
+			wlog->error(F("getMQTTResponseStream no space!"));
+		} else {
+			responseStream->flush();
+		}
 		return responseStream;
 	}
 	void setDesiredModeAp(){
@@ -798,7 +837,7 @@ private:
 		if ((this->isMqttConnected()) && (isSupportingMqtt())){
 			if (device->isDeviceStateComplete()) {
 				wlog->notice(F("Send actual device state via MQTT %s"), topic.c_str());
-				WStringStream* response = getResponseStream();
+				WStringStream* response = getMQTTResponseStream();
 				WJson json(response);
 				json.beginObject();
 				if (device->isMainDevice()) {
@@ -917,7 +956,7 @@ private:
 				while (device != nullptr) {
 					String topic("devices/");
 					topic.concat(device->getId());
-					WStringStream* response = getResponseStream();
+					WStringStream* response = getMQTTResponseStream();
 					WJson json(response);
 					json.beginObject();
 					json.propertyString("url", "http://", getDeviceIp().toString().c_str(), "/things/", device->getId());
@@ -988,9 +1027,6 @@ private:
 					while (subpage != nullptr) {
 						String url =(String)device->getId()+"_"+(String)subpage->getId();
 						page->printf_P(HTTP_BUTTON, url.c_str() , "get", subpage->getTitle());
-						//page->printf_P(HTTP_BUTTON, "YY", "get", "XX");
-						//Serial.printf("YYY1: %s\n", url.c_str());
-						//Serial.printf("YYY2: %s\n", subpage->getTitle());
 						subpage = subpage->next;
 					}
 					device = device->next;
@@ -1249,7 +1285,7 @@ private:
 
 	template<class T, typename ... Args> AsyncResponseStream * httpHeader(AsyncWebServerRequest *request, T title, const __FlashStringHelper * HeaderAdditional) {
 		if (!isWebServerRunning()) return nullptr;
-		AsyncResponseStream *page = request->beginResponseStream(TEXT_HTML, 3096U);
+		AsyncResponseStream *page = request->beginResponseStream(CT_TEXT_HTML, 3096U);
 		page->printf_P(HTTP_HEAD_BEGIN, getIdx(), title);
 		page->print(FPSTR(HTTP_HEAD_SCRIPT));
 		page->print(FPSTR(HTTP_HEAD_STYLE));
@@ -1498,12 +1534,12 @@ private:
 
 	void handleUnknown(AsyncWebServerRequest *request) {
 		wlog->warning(F("Webserver: 404: '%s'"), request->url().c_str());
-		request->send(404, "text/plain", "404: Not found");
+		request->send(404, CT_TEXT_PLAIN, F("404: Not found"));
 	}
 
 	void sendDevicesStructure(AsyncWebServerRequest* request) {
-		wlog->notice(F("Send description for all devices... "));
-		WStringStream* response = getResponseStream();
+		wlog->notice(F("Send description for all devices... %d"), ESP.getFreeHeap());
+		WStringStream* response = new WStringStream(SIZE_JSON_PACKET);
 		WJson json(response);
 		json.beginArray();
 		WDevice *device = this->firstDevice;
@@ -1521,7 +1557,7 @@ private:
 
 	void sendDeviceStructure(AsyncWebServerRequest *request, WDevice *device) {
 		wlog->notice(F("Send description for device: %s"), device->getId());
-		WStringStream* response = getResponseStream();
+		WStringStream* response = new WStringStream(SIZE_JSON_PACKET);
 		WJson json(response);
 		device->toJsonStructure(&json, "", WEBTHING);
 		request->send(200, APPLICATION_JSON, response->c_str());
@@ -1530,7 +1566,7 @@ private:
 
 	void sendDeviceValues(AsyncWebServerRequest *request, WDevice *device) {
 		wlog->notice(F("Send all properties for device: "), device->getId());
-		WStringStream* response = getResponseStream();
+		WStringStream* response = new WStringStream(SIZE_JSON_PACKET);
 		WJson json(response);
 		json.beginObject();
 		if (device->isMainDevice()) {
@@ -1542,6 +1578,74 @@ private:
 		json.endObject();
 		request->send(200, APPLICATION_JSON, response->c_str());
 		delete response;
+	}
+	void handleThings(AsyncWebServerRequest *request){
+		if (request->method()!=HTTP_GET && request->method()!=HTTP_PUT){
+			request->send(405); // METHOD NOT ALLOWD
+			return;
+		}
+		bool isPut=(request->method()==HTTP_PUT);
+
+		String uri = request->url();
+		//strip last /
+		if (uri.substring(uri.length() - 1).c_str()[0]=='/') uri[uri.length() - 1]='\0';
+		wlog->trace(F("handleThings: uri: '%s'"), uri.c_str());
+
+		if (!uri.startsWith(URI_THINGS)){
+			handleUnknown(request); return;
+		}
+		
+		if (uri.equals(URI_THINGS)){
+			if (!isPut) sendDevicesStructure(request);
+			else request->send(405);
+			return;
+		}
+		if (!uri.startsWith((String)URI_THINGS + (String)URI_SEP)){
+			handleUnknown(request); return;
+		}
+		String devName=uri.substring(((String)URI_THINGS + (String)URI_SEP).length());
+		wlog->trace(F("handleThings: devName: '%s'"), devName.c_str());
+		WDevice *device = this->firstDevice;
+		while (device != nullptr) {
+			if (devName.startsWith(device->getId())){
+				// match
+				if (devName.equals(device->getId())){
+					if (!isPut) sendDeviceStructure(request, device);
+					else request->send(405);
+					return;
+				} else if (devName.equals((String)device->getId() + URI_PROPERTIES)){
+					if (!isPut && !request->hasArg(PARAM_PLAIN)){
+						sendDeviceValues(request, device);
+					} else {
+						setPropertyValue(request, device);
+					}
+					return;
+				} else if (devName.startsWith((String)device->getId() + URI_PROPERTIES + URI_SEP)){
+					String propName=devName.substring(((String)device->getId() + URI_PROPERTIES + URI_SEP).length());
+					wlog->trace(F("handleThings: propName: '%s'"), propName.c_str());
+					WProperty * property = device->firstProperty;
+					while (property != nullptr) {
+						if (property->isVisible(WEBTHING)) {
+							if (propName.equals(property->getId())){
+								if (!isPut && !request->hasArg(PARAM_PLAIN) ){
+									getPropertyValue(request, property);
+								} else {
+									setPropertyValue(request, device);
+								}
+								return;
+							}
+						}
+
+						property = property->next;
+					}
+
+				}
+			}
+			device = device->next;
+		}
+
+		handleUnknown(request);
+		return;
 	}
 
 #ifndef MINIMAL
@@ -1572,80 +1676,39 @@ private:
 #endif
 
 	void getPropertyValue(AsyncWebServerRequest *request, WProperty *property) {
-		WStringStream* response = getResponseStream();
+		WStringStream* response = new WStringStream(SIZE_JSON_PACKET);
 		WJson json(response);
 		json.beginObject();
 		property->toJsonValue(&json);
 		json.endObject();
 		property->setRequested(true);
 		wlog->trace(F("getPropertyValue %s"), response->c_str());
-		//FIXMEwebServer->send(200, APPLICATION_JSON, response->c_str());
-
+		request->send(200, APPLICATION_JSON, response->c_str());
+		delete response;
 	}
 
 	void setPropertyValue(AsyncWebServerRequest *request, WDevice *device) {
-		if (request->hasArg("plain") == false) {
+		if (request->hasArg(PARAM_PLAIN) == false) {
 			request->send(422); // Unprocessable Entity
 			return;
 		}
 		WJsonParser parser;
-		WProperty* property = parser.parse(request->getParam("plain")->value().c_str(), device);
+		WProperty* property = parser.parse(request->getParam(PARAM_PLAIN)->value().c_str(), device);
 		if (property != nullptr) {
 			//response new value
-			wlog->notice(F("Set property value: %s (web request) %s"), property->getId(), request->getParam("plain")->value().c_str());
-			WStringStream* response = getResponseStream();
+			wlog->notice(F("Set property value: %s (web request) %s"), property->getId(), request->getParam(PARAM_PLAIN)->value().c_str());
+			WStringStream* response = new WStringStream(SIZE_JSON_PACKET);
 			WJson json(response);
 			json.beginObject();
 			property->toJsonValue(&json);
 			json.endObject();
 			request->send(200, APPLICATION_JSON, response->c_str());
+			delete response;
 		} else {
 			// unable to parse json
-			wlog->notice(F("unable to parse json: %s"), request->getParam("plain")->value().c_str());
+			wlog->notice(F("unable to parse json: %s"), request->getParam(PARAM_PLAIN)->value().c_str());
 			request->send(500);
 		}
-	}
-
-	void sendErrorMsg(int status, const char *msg) {
-		//FIXME
-		#if 0
-		WStringStream* response = getResponseStream();
-		WJson json(response);
-		json.beginObject();
-		json.propertyString("error", msg);
-		json.propertyInteger("status", status);
-		json.endObject();
-		webServer->send(200, APPLICATION_JSON, response->c_str());
-		#endif
-	}
-
-	void bindWebServerCallsNetwork(WDevice *device) {
-		wlog->notice(F("Bind webServer calls for device %s"), device->getId());
-		String deviceBase("/things/");
-		deviceBase.concat(device->getId());
-		#if 0
-		WProperty *property = device->firstProperty;
-		while (property != nullptr) {
-			if (property->isVisible(WEBTHING)) {
-				String propertyBase = deviceBase + "/properties/" + property->getId();
-				webServer->on(propertyBase.c_str(), HTTP_GET, [this, property](AsyncWebServerRequest *request){
-					getPropertyValue(request, property);
-				});
-				webServer->on(propertyBase.c_str(), HTTP_PUT, [this, device](AsyncWebServerRequest *request){
-					setPropertyValue(request, device);
-				});
-			}
-			property = property->next;
-		}
-		#endif
-		String propertiesBase = deviceBase + "/properties";
-		webServer->on(propertiesBase.c_str(), HTTP_GET,	[this, device](AsyncWebServerRequest *request){
-			sendDeviceValues(request, device);
-		});
-		webServer->on(deviceBase.c_str(), HTTP_GET,	[this, device](AsyncWebServerRequest *request){
-			sendDeviceStructure(request, device);
-		});
-		device->bindWebServerCalls(webServer);
 	}
 
 	WDevice* getDeviceById(const char* deviceId) {

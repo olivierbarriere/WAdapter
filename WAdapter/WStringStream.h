@@ -5,25 +5,29 @@
 
 class WStringStream : public Stream {
 public:
-    WStringStream(unsigned int maxLength) {
-    	this->maxLength = maxLength;
-    	this->keepString = false;
-    	this->string = new char[maxLength + 1];
-    	this->flush();
-    }
-
+    
     WStringStream(unsigned int maxLength, bool keepString) {
-    	this->maxLength = maxLength;
-    	this->keepString = keepString;
-    	this->string = new char[maxLength + 1];
-    	this->flush();
+		init(maxLength, keepString);
     }
-
+	WStringStream(unsigned int maxLength) {
+		init(maxLength, false);
+	}
     ~WStringStream() {
     	if ((!keepString) && (this->string)) {
     		delete[] this->string;
     	}
     }
+
+	void init(unsigned int maxLength, bool keepString){
+		this->keepString = keepString;
+		this->string = (char*)malloc(maxLength + 1);
+		if (!this->string){
+			this->maxLength=0;
+		} else {
+			this->maxLength = maxLength;
+			this->flush();
+		}
+	}
 
     // Stream methods
     virtual int available() {
@@ -31,6 +35,7 @@ public:
     }
 
     virtual int read() {
+		if (this->string==nullptr) return -1;
     	if (position > 0) {
     		char c = string[0];
     		for (int i = 1; i <= position; i++) {
@@ -43,6 +48,7 @@ public:
     }
 
     virtual int peek() {
+		if (this->string==nullptr) -1;
     	if (position > 0) {
     	    char c = string[0];
     	    return c;
@@ -51,6 +57,7 @@ public:
     }
 
     virtual void flush() {
+		if (this->string==nullptr) return;
     	this->position = 0;
     	this->string[0] = '\0';
     }
