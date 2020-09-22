@@ -35,6 +35,7 @@ const char* CT_TEXT_HTML PROGMEM = "text/html";
 const char* CT_TEXT_PLAIN PROGMEM = "text/plain";
 const char* CT_TEXT_CSS PROGMEM = "text/css";
 const char* CT_TEXT_JS PROGMEM = "text/javascript";
+const char* CT_IMAGE_ICON PROGMEM = "image/x-icon";
 
 const char* URI_SEP = "/";
 const char* URI_CONFIG PROGMEM = "/config";
@@ -46,6 +47,7 @@ const char* URI_RESET PROGMEM = "/reset";
 const char* URI_FIRMWARE PROGMEM = "/firmware";
 const char* URI_CSS PROGMEM = "/css";
 const char* URI_JS PROGMEM = "/js";
+const char* URI_FAVICON PROGMEM = "/favicon.ico";
 
 const char* URI_PROPERTIES PROGMEM = "/properties";
 const char* URI_THINGS PROGMEM = "/things";
@@ -59,7 +61,10 @@ const char* STR_WEBTHING PROGMEM = "webthing";
 const char* STR_TRUE PROGMEM = "true";
 const char* STR_FALSE PROGMEM = "false";
 
-const char* PARAM_PLAIN PROGMEM = "plain";
+const char* PARAM_BODY PROGMEM = "body";
+
+const char* HEADER_CT_ENCODING PROGMEM = "Content-Encoding";
+const char* HEADER_CT_ENCODING_GZ PROGMEM = "gzip";
 
 const char* DEFAULT_TOPIC_STATE PROGMEM = "properties";
 const char* DEFAULT_TOPIC_SET PROGMEM = "set";
@@ -493,9 +498,13 @@ true ||
 				} else if (url.equals(URI_FIRMWARE)){
 					handleHttpFirmwareUpdate(request);
 				} else if (url.equals(URI_CSS)){
-					request->send_P(200, CT_TEXT_CSS, PAGE_CSS);
+				request->send_P(200, CT_TEXT_CSS, PAGE_CSS);
 				} else if (url.equals(URI_JS)){
 					request->send_P(200, CT_TEXT_JS, PAGE_JS);
+				} else if (url.equals(URI_FAVICON)){
+					AsyncWebServerResponse *response = request->beginResponse_P(200, CT_IMAGE_ICON, favicon_ico_gz, favicon_ico_gz_len);
+					response->addHeader(HEADER_CT_ENCODING, HEADER_CT_ENCODING_GZ);
+					request->send(response);
 				} else if (url.startsWith(URI_THINGS)){
 					handleThings(request);
 				} else {
@@ -1614,7 +1623,7 @@ private:
 					else request->send(405);
 					return;
 				} else if (devName.equals((String)device->getId() + URI_PROPERTIES)){
-					if (!isPut && !request->hasArg(PARAM_PLAIN)){
+					if (!isPut){
 						sendDeviceValues(request, device);
 					} else {
 						setPropertyValue(request, device);
@@ -1627,7 +1636,7 @@ private:
 					while (property != nullptr) {
 						if (property->isVisible(WEBTHING)) {
 							if (propName.equals(property->getId())){
-								if (!isPut && !request->hasArg(PARAM_PLAIN) ){
+								if (!isPut){
 									getPropertyValue(request, property);
 								} else {
 									setPropertyValue(request, device);
@@ -1688,15 +1697,18 @@ private:
 	}
 
 	void setPropertyValue(AsyncWebServerRequest *request, WDevice *device) {
-		if (request->hasArg(PARAM_PLAIN) == false) {
+		if (!request->hasParam(PARAM_BODY, true)) {
+			if (request->hasParam("plain", true)) wlog->warning(F("Would have plain"));
+			wlog->warning(F("Sending HTTP Error 422"));
 			request->send(422); // Unprocessable Entity
 			return;
 		}
+		wlog->notice(F("BODY: %s"), request->getParam(PARAM_BODY, true)->value().c_str());
 		WJsonParser parser;
-		WProperty* property = parser.parse(request->getParam(PARAM_PLAIN)->value().c_str(), device);
+		WProperty* property = parser.parse(request->getParam(PARAM_BODY, true)->value().c_str(), device);
 		if (property != nullptr) {
 			//response new value
-			wlog->notice(F("Set property value: %s (web request) %s"), property->getId(), request->getParam(PARAM_PLAIN)->value().c_str());
+			wlog->notice(F("Set property value: %s (web request) %s"), property->getId(), request->getParam(PARAM_BODY, true)->value().c_str());
 			WStringStream* response = new WStringStream(SIZE_JSON_PACKET);
 			WJson json(response);
 			json.beginObject();
@@ -1706,7 +1718,7 @@ private:
 			delete response;
 		} else {
 			// unable to parse json
-			wlog->notice(F("unable to parse json: %s"), request->getParam(PARAM_PLAIN)->value().c_str());
+			wlog->notice(F("unable to parse json: %s"), request->getParam(PARAM_BODY, true)->value().c_str());
 			request->send(500);
 		}
 	}
