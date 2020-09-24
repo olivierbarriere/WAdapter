@@ -3,11 +3,13 @@
 
 #include "WProperty.h"
 
+const char* ATTYPE_LONG PROGMEM = "LongProperty";
+
 class WLongProperty: public WProperty {
 public:
 	WLongProperty(const char* id)
 	: WProperty(id, id, LONG) {
-		this->atType = "LongProperty";
+		this->atType = ATTYPE_LONG;
 	}
 
 protected:

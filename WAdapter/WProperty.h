@@ -4,6 +4,25 @@
 #include <Arduino.h>
 #include "WJson.h"
 
+
+const char* STR_MINIMUM PROGMEM = "minimum";
+const char* STR_MAXIMUM PROGMEM = "maximum";
+const char* STR_CELSIUS PROGMEM = "celsius";
+const char* STRPROP_TRUE PROGMEM = "true";
+const char* STRPROP_FALSE PROGMEM = "true";
+const char* STRPROP_TITLE PROGMEM = "title";
+const char* STRPROP_TYPE PROGMEM = "type";
+const char* STRPROP_ATTYPE PROGMEM = "@type";
+const char* STRPROP_BOOLEAN PROGMEM = "boolean";
+const char* STRPROP_NUMBER PROGMEM = "number";
+const char* STRPROP_STRING PROGMEM = "string";
+const char* STRPROP_READONLY PROGMEM = "readOnly";
+const char* STRPROP_UNIT PROGMEM = "unit";
+const char* STRPROP_MULTIPLEOF PROGMEM = "multipleOf";
+const char* STRPROP_ENUM PROGMEM = "enum";
+const char* STRPROP_HREF PROGMEM = "href";
+const char* STRPROP_PROPERTIES PROGMEM = "/properties/";
+
 enum WPropertyType {
 	BOOLEAN, DOUBLE, INTEGER, LONG, UNSIGNED_LONG, BYTE, STRING
 };
@@ -20,6 +39,23 @@ union WPropertyValue {
 	unsigned long asUnsignedLong;
 	byte asByte;
 	char* string;
+};
+
+class WConstStringProperty {
+public:
+	WConstStringProperty(const char * str) {
+		value = str;
+		next = nullptr;
+	}
+	~WConstStringProperty() {
+	}
+	const char* c_str() {
+		return value;
+	}
+
+	WConstStringProperty* next;
+	private:
+	const char * value;
 };
 
 class WProperty {
@@ -108,7 +144,6 @@ public:
 			this->requested = false;
 		}
 	}
-
 	void setNull() {
 		this->valueNull = true;
 	}
@@ -124,34 +159,36 @@ public:
 	virtual bool parse(String value) {
 		if ((!isReadOnly()) && (value != nullptr)) {
 			switch (getType()) {
-			case BOOLEAN: {
-				setBoolean(value.equalsIgnoreCase("true"));
-				return true;
+				case BOOLEAN: {
+					setBoolean(value.equalsIgnoreCase(STRPROP_TRUE));
+					return true;
+				}
+				case DOUBLE: {
+					setDouble(value.toDouble());
+					return true;
+				}
+				case INTEGER: {
+					setInteger(value.toInt());
+					return true;
+				}
+				case LONG: {
+					setLong(value.toInt());
+					return true;
+				}
+				case UNSIGNED_LONG: {
+					setUnsignedLong(value.toInt());
+					return true;
+				}
+				case BYTE: {
+					setByte(value.toInt());
+					return true;
+				}
+				case STRING: {
+					setString(value.c_str());
+					return true;
+				}
 			}
-			case DOUBLE: {
-				setDouble(value.toDouble());
-				return true;
-			}
-			case INTEGER: {
-				setInteger(value.toInt());
-				return true;
-			}
-			case LONG: {
-				setLong(value.toInt());
-				return true;
-			}
-			case UNSIGNED_LONG: {
-				setUnsignedLong(value.toInt());
-				return true;
-			}
-			case BYTE: {
-				setByte(value.toInt());
-				return true;
-			}
-			case STRING:
-				setString(value.c_str());
-				return true;
-			}
+	
 		}
 		return false;
 	}
@@ -300,7 +337,7 @@ public:
 		return ((!this->valueNull) && (this->value.asByte == number));
 	}
 
-	char* c_str() {
+	const char* c_str() {
 		requestValue();
 		return value.string;
 	}
@@ -361,7 +398,7 @@ public:
 	virtual String toString() {
 		switch (getType()) {
 		case BOOLEAN:
-			return String( (getBoolean() ? "true" : "false"));
+			return String( (getBoolean() ? STRPROP_TRUE : STRPROP_FALSE));
 			break;
 		case DOUBLE:
 			return String(getDouble());
@@ -417,63 +454,45 @@ public:
 		json->beginObject(memberName);
 		//title
 		if (this->getTitle() != "") {
-			json->propertyString("title", getTitle());
+			json->propertyString(STRPROP_TITLE, getTitle());
 		}
 		//type
 		switch (this->getType()) {
 		case BOOLEAN:
-			json->propertyString("type", "boolean");
+			json->propertyString(STRPROP_TYPE, STRPROP_BOOLEAN);
 			break;
 		case DOUBLE:
 		case INTEGER:
 		case LONG:
 		case UNSIGNED_LONG:
 		case BYTE:
-			json->propertyString("type", "number");
+			json->propertyString(STRPROP_TYPE, STRPROP_NUMBER);
 			break;
 		default:
-			json->propertyString("type", "string");
+			json->propertyString(STRPROP_TYPE, STRPROP_STRING);
 			break;
 		}
 		//readOnly
 		if (this->isReadOnly()) {
-			json->propertyBoolean("readOnly", true);
+			json->propertyBoolean(STRPROP_READONLY, true);
 		}
 		//unit
 		if (this->getUnit() != "") {
-			json->propertyString("unit", this->getUnit());
+			json->propertyString(STRPROP_UNIT, (this->getUnit() ? this->getUnit() : ""));
 		}
 		//multipleOf
 		if (this->getMultipleOf() > 0.0) {
-			json->propertyDouble("multipleOf", this->getMultipleOf());
+			json->propertyDouble(STRPROP_MULTIPLEOF, this->getMultipleOf());
 		}
 		//enum
 		if (hasEnum()) {
-			json->beginArray("enum");
-			WProperty* propE = this->firstEnum;
+			json->beginArray(STRPROP_ENUM);
+			WConstStringProperty* propE = this->firstEnum;
 			while (propE != nullptr) {
 				switch (this->getType()) {
-				case BOOLEAN:
-					json->boolean(propE->getBoolean());
-				   	break;
-				case DOUBLE:
-					json->numberDouble(propE->getDouble());
-					break;
-				case INTEGER:
-					json->numberInteger(propE->getInteger());
-					break;
-				case LONG:
-					json->numberLong(propE->getLong());
-					break;
-				case UNSIGNED_LONG:
-					json->numberUnsignedLong(propE->getUnsignedLong());
-					break;
-				case BYTE:
-					json->numberByte(propE->getByte());
-					break;
 				case STRING:
 					json->string(propE->c_str());
-				  	break;
+					break;
 				}
 				propE = propE->next;
 			}
@@ -481,80 +500,25 @@ public:
 		}
 		//aType
 		if (this->getAtType() != "") {
-			json->propertyString("@type", this->getAtType());
+			json->propertyString(STRPROP_ATTYPE, (this->getAtType() ?  this->getAtType() : ""));
 		}
 		toJsonStructureAdditionalParameters(json);
-		json->propertyString("href", deviceHRef, "/properties/", this->getId());
+		json->propertyString(STRPROP_HREF, deviceHRef, STRPROP_PROPERTIES, this->getId());
 		json->endObject();
 	}
 
 	WProperty* next;
 
-	void addEnumBoolean(bool enumBoolean) {
-		if (type != BOOLEAN) {
-			return;
-		}
-		WProperty* valueE = new WProperty("", "", this->type, 0);
-		valueE->setBoolean(enumBoolean);
-		this->addEnum(valueE);
-	}
-
-	void addEnumNumber(double enumNumber) {
-		if (type != DOUBLE) {
-			return;
-		}
-		WProperty* valueE = new WProperty("", "", this->type, 0);
-		valueE->setDouble(enumNumber);
-		this->addEnum(valueE);
-	}
-
-	void addEnumInteger(int enumNumber) {
-		if (type != INTEGER) {
-			return;
-		}
-		WProperty* valueE = new WProperty("", "", this->type, 0);
-		valueE->setInteger(enumNumber);
-		this->addEnum(valueE);
-	}
-
-	void addEnumLong(long enumNumber) {
-		if (type != LONG) {
-			return;
-		}
-		WProperty* valueE = new WProperty("", "", this->type, 0);
-		valueE->setLong(enumNumber);
-		this->addEnum(valueE);
-	}
-
-	void addEnumUnsignedLong(unsigned long enumNumber) {
-		if (type != UNSIGNED_LONG) {
-			return;
-		}
-		WProperty* valueE = new WProperty("", "", this->type, 0);
-		valueE->setUnsignedLong(enumNumber);
-		this->addEnum(valueE);
-	}
-
-	void addEnumByte(byte enumByte) {
-		if (type != BYTE) {
-			return;
-		}
-		WProperty* valueE = new WProperty("", "", this->type, 0);
-		valueE->setByte(enumByte);
-		this->addEnum(valueE);
-	}
-
 	void addEnumString(const char* enumString) {
 		if (type != STRING) {
 			return;
 		}
-		WProperty* valueE = new WProperty("", "", this->type, this->length - 1);
-		valueE->setString(enumString);
+		WConstStringProperty* valueE = new WConstStringProperty(enumString);
 		this->addEnum(valueE);
 	}
 
-	void addEnum(WProperty* propEnum) {
-		WProperty* lastEnum = firstEnum;
+	void addEnum(WConstStringProperty* propEnum) {
+		WConstStringProperty* lastEnum = firstEnum;
 		while ((lastEnum != nullptr) && (lastEnum->next != nullptr)) {
 			lastEnum = lastEnum->next;
 		}
@@ -614,8 +578,8 @@ protected:
 		this->silentChange = false;
 		this->notifying = false;
 		this->readOnly = false;
-		this->atType = "";
-		this->unit = "";
+		this->atType = nullptr;
+		this->unit = nullptr;
 		this->multipleOf = 0.0;
 		this->onChange = nullptr;
 		this->deviceNotification = nullptr;
@@ -683,7 +647,7 @@ private:
 	bool silentChange;
 	bool notifying;
 
-	WProperty* firstEnum = nullptr;
+	WConstStringProperty* firstEnum = nullptr;
 
 	void notify() {
 		if (!valueRequesting && !silentChange) {

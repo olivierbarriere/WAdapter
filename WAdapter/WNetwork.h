@@ -27,8 +27,12 @@
 #include "webserverHelper.h"
 
 #define SIZE_MQTT_PACKET 1536
-#define SIZE_JSON_PACKET 3096
+#define SIZE_JSON_PACKET 2048
 #define NO_LED -1
+
+const char* ID_NETWORK PROGMEM = "network";
+const char* NAME_NETWORK PROGMEM = "Network";
+
 const char* CONFIG_PASSWORD PROGMEM = "12345678";
 const char* APPLICATION_JSON PROGMEM = "application/json";
 const char* CT_TEXT_HTML PROGMEM = "text/html";
@@ -40,8 +44,7 @@ const char* CT_IMAGE_ICON PROGMEM = "image/x-icon";
 const char* URI_SEP = "/";
 const char* URI_CONFIG PROGMEM = "/config";
 const char* URI_WIFI PROGMEM = "/wifi";
-const char* URI_SAVE PROGMEM = "/save";
-const char* URI_SAVE_SUB PROGMEM = "/save_";
+const char* URI_SAVE PROGMEM = "/save_";
 const char* URI_INFO PROGMEM = "/info";
 const char* URI_RESET PROGMEM = "/reset";
 const char* URI_FIRMWARE PROGMEM = "/firmware";
@@ -142,6 +145,7 @@ public:
 		this->applicationName = applicationName;
 		this->firmwareVersion = firmwareVersion;
 		this->webServer = nullptr;
+		this->bodyBuffer = nullptr;
 		this->dnsApServer = nullptr;
 		this->debug = debug;
 		this->statusLedPin = statusLedPin;
@@ -467,15 +471,24 @@ true ||
 		//if ((WiFi.status() != WL_CONNECTED) || (!this->isSupportingWebThing())) {
 
 		webServer->on(URI_FIRMWARE, HTTP_POST, [this](AsyncWebServerRequest *request){
+			logWebAccess(request);
 			handleHttpFirmwareUpdateFinished(request);
 		}, [this](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
 			handleHttpFirmwareUpdateProgress(request, filename, index, data, len, final);
 		});
 
+		webServer->on(URI_THINGS, HTTP_PUT, [this](AsyncWebServerRequest *request){
+			logWebAccess(request);
+			handleThings(request);
+			handlePutBodyDone();
+		}, nullptr, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+			handlePutBody(request, data, len, index, total);
+		});
+
 		// every webServer->on requests 144 Byte of Heap - so save heap
-		webServer->on("", HTTP_GET | HTTP_POST | HTTP_PUT, [this](AsyncWebServerRequest *request){
+		webServer->on("", HTTP_GET | HTTP_POST, [this](AsyncWebServerRequest *request){
 			String url=request->url();
-			wlog->notice(F("Serving: '%s', method %d"), url.c_str(), request->method());
+			logWebAccess(request);
 			bool handled=true;
 			if (request->method()==HTTP_GET){
 				if (url.equals("") || 
@@ -489,7 +502,7 @@ true ||
 					handleHttpRootRequest(request);
 				} else if (url.equals(URI_WIFI)){
 					handleHttpNetworkConfiguration(request);
-				} else if (url.equals(URI_SAVE)){
+				} else if (url.equals((String)URI_SAVE+ID_NETWORK)){
 					handleHttpsave(request);
 				} else if (url.equals(URI_INFO)){
 					handleHttpInfo(request);
@@ -501,10 +514,12 @@ true ||
 				request->send_P(200, CT_TEXT_CSS, PAGE_CSS);
 				} else if (url.equals(URI_JS)){
 					request->send_P(200, CT_TEXT_JS, PAGE_JS);
+#ifndef MINIMAL
 				} else if (url.equals(URI_FAVICON)){
 					AsyncWebServerResponse *response = request->beginResponse_P(200, CT_IMAGE_ICON, favicon_ico_gz, favicon_ico_gz_len);
 					response->addHeader(HEADER_CT_ENCODING, HEADER_CT_ENCODING_GZ);
 					request->send(response);
+#endif
 				} else if (url.startsWith(URI_THINGS)){
 					handleThings(request);
 				} else {
@@ -513,7 +528,7 @@ true ||
 					while (device != nullptr) {
 						String did("/");
 						did.concat(device->getId());
-						String saveDid(URI_SAVE_SUB);
+						String saveDid(URI_SAVE);
 						saveDid.concat(device->getId());
 						if (url.equals(did)){
 							handleHttpDeviceConfiguration(request, device);
@@ -530,7 +545,7 @@ true ||
 								String didSub(did);
 								didSub.concat("_");
 								didSub.concat(subpage->getId());
-								String saveDidSub(URI_SAVE_SUB);
+								String saveDidSub(URI_SAVE);
 								saveDidSub.concat(did);
 								saveDidSub.concat("_");
 								saveDidSub.concat(subpage->getId());
@@ -767,6 +782,18 @@ true ||
 		}
 		return responseStream;
 	}
+	WStringStream* getResponseStreamWeb() {
+		if (responseStreamWeb == nullptr) {
+			responseStreamWeb = new WStringStream(SIZE_JSON_PACKET);
+		}
+		if (responseStreamWeb == nullptr){
+			wlog->error(F("getMQTTResponseStreamWeb no space!"));
+		} else {
+			responseStreamWeb->flush();
+		}
+		return responseStreamWeb;
+	}
+
 	void setDesiredModeAp(){
 		this->wifiModeDesired = wnWifiMode::WIFIMODE_AP;
 	}
@@ -812,6 +839,7 @@ private:
 	WProperty *mqttBaseTopic;
 	WProperty *mqttStateTopic;
 	WProperty *mqttSetTopic;
+	char * bodyBuffer;
 #ifndef MINIMAL
 	WAdapterMqtt *mqttClient;
 	long lastMqttConnect;
@@ -821,6 +849,8 @@ private:
 	WProperty *idx;
 	long lastWifiConnect;
 	WStringStream* responseStream = nullptr;
+	WStringStream* responseStreamWeb = nullptr;
+	AsyncResponseStream *page =nullptr;
 	WLed *statusLed;
 	int statusLedPin;
 	WSettings *settings;
@@ -1064,8 +1094,7 @@ private:
 			device->printConfigPage(request, page);
 			httpFooter(page);
 			request->send(page);
-					}
-
+		}
 	}
 	void handleHttpDevicePage(AsyncWebServerRequest *request, WDevice *device, WPage *subpage) {
 		if (isWebServerRunning()) {
@@ -1087,7 +1116,7 @@ private:
 			page->printf_P(HTTP_HOME_BUTTON);
 			httpFooter(page);
 			request->send(page);
-						wlog->notice(F("handleHttpDevicePageSubmitted Done"));
+			wlog->notice(F("handleHttpDevicePageSubmitted Done"));
 		}
 	}
 
@@ -1099,7 +1128,7 @@ private:
 			wlog->notice(F("Network config page"));
 			AsyncResponseStream* page = httpHeader(request, F("Network Configuration"));
 			printHttpCaption(page);
-			page->printf_P(HTTP_CONFIG_PAGE_BEGIN, "");
+			page->printf_P(HTTP_CONFIG_PAGE_BEGIN, ID_NETWORK);
 			page->printf_P(HTTP_PAGE_CONFIGURATION_STYLE, (this->isSupportingMqtt() ? F("block") : F("none")));
 			page->printf_P(HTTP_TEXT_FIELD, F("Hostname/Idx:"), "i", "16", getIdx());
 			page->printf_P(HTTP_TEXT_FIELD, F("Wifi ssid (only 2.4G):"), "s", "32", getSsid());
@@ -1125,7 +1154,7 @@ private:
 			page->printf_P(HTTP_CONFIG_SAVE_BUTTON);
 			httpFooter(page);
 			request->send(page);
-					}
+		}
 	}
 
 	void handleHttpsave(AsyncWebServerRequest *request) {
@@ -1294,7 +1323,7 @@ private:
 
 	template<class T, typename ... Args> AsyncResponseStream * httpHeader(AsyncWebServerRequest *request, T title, const __FlashStringHelper * HeaderAdditional) {
 		if (!isWebServerRunning()) return nullptr;
-		AsyncResponseStream *page = request->beginResponseStream(CT_TEXT_HTML, 3096U);
+		page = request->beginResponseStream(CT_TEXT_HTML, 3096U);
 		page->printf_P(HTTP_HEAD_BEGIN, getIdx(), title);
 		page->print(FPSTR(HTTP_HEAD_SCRIPT));
 		page->print(FPSTR(HTTP_HEAD_STYLE));
@@ -1548,8 +1577,8 @@ private:
 
 	void sendDevicesStructure(AsyncWebServerRequest* request) {
 		wlog->notice(F("Send description for all devices... %d"), ESP.getFreeHeap());
-		WStringStream* response = new WStringStream(SIZE_JSON_PACKET);
-		WJson json(response);
+		responseStreamWeb = getResponseStreamWeb();
+		WJson json(responseStreamWeb);
 		json.beginArray();
 		WDevice *device = this->firstDevice;
 		while (device != nullptr) {
@@ -1559,24 +1588,22 @@ private:
 			device = device->next;
 		}
 		json.endArray();
-		request->send(200, APPLICATION_JSON, response->c_str());
+		request->send(200, APPLICATION_JSON, responseStreamWeb->c_str());
 		wlog->notice(F("DONE"));
-		delete response;
 	}
 
 	void sendDeviceStructure(AsyncWebServerRequest *request, WDevice *device) {
 		wlog->notice(F("Send description for device: %s"), device->getId());
-		WStringStream* response = new WStringStream(SIZE_JSON_PACKET);
-		WJson json(response);
+		responseStreamWeb = getResponseStreamWeb();
+		WJson json(responseStreamWeb);
 		device->toJsonStructure(&json, "", WEBTHING);
-		request->send(200, APPLICATION_JSON, response->c_str());
-		delete response;
+		request->send(200, APPLICATION_JSON, responseStreamWeb->c_str());
 	}
 
 	void sendDeviceValues(AsyncWebServerRequest *request, WDevice *device) {
 		wlog->notice(F("Send all properties for device: "), device->getId());
-		WStringStream* response = new WStringStream(SIZE_JSON_PACKET);
-		WJson json(response);
+		responseStreamWeb = getResponseStreamWeb();
+		WJson json(responseStreamWeb);
 		json.beginObject();
 		if (device->isMainDevice()) {
 			json.propertyString(PROP_IDX, getIdx());
@@ -1585,9 +1612,31 @@ private:
 		}
 		device->toJsonValues(&json, WEBTHING);
 		json.endObject();
-		request->send(200, APPLICATION_JSON, response->c_str());
-		delete response;
+		request->send(200, APPLICATION_JSON, responseStreamWeb->c_str());
 	}
+
+	void handlePutBodyDone(){
+		if (bodyBuffer!=nullptr){
+			delete[] bodyBuffer;
+			bodyBuffer=nullptr;
+		}
+	}
+	
+	void handlePutBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+		if (!index){
+			if (bodyBuffer==nullptr){
+				bodyBuffer=(char*)malloc(total+1);
+				bodyBuffer[0]='\0';
+			}
+		}
+		memcpy(bodyBuffer+index, data, len);
+		bodyBuffer[index+len]='\0';
+		//bodyBuffer
+		if (index + len == total){
+		}
+
+	}
+
 	void handleThings(AsyncWebServerRequest *request){
 		if (request->method()!=HTTP_GET && request->method()!=HTTP_PUT){
 			request->send(405); // METHOD NOT ALLOWD
@@ -1644,10 +1693,9 @@ private:
 								return;
 							}
 						}
-
 						property = property->next;
 					}
-
+					wlog->trace(F("handleThings: propName: '%s' DONE"), propName.c_str());
 				}
 			}
 			device = device->next;
@@ -1685,40 +1733,40 @@ private:
 #endif
 
 	void getPropertyValue(AsyncWebServerRequest *request, WProperty *property) {
-		WStringStream* response = new WStringStream(SIZE_JSON_PACKET);
-		WJson json(response);
+		responseStreamWeb = getResponseStreamWeb();
+		WJson json(responseStreamWeb);
 		json.beginObject();
 		property->toJsonValue(&json);
 		json.endObject();
 		property->setRequested(true);
-		wlog->trace(F("getPropertyValue %s"), response->c_str());
-		request->send(200, APPLICATION_JSON, response->c_str());
-		delete response;
+		wlog->trace(F("getPropertyValue %s (%d)"), responseStreamWeb->c_str(), ESP.getMaxFreeBlockSize());
+		request->send_P(200, APPLICATION_JSON, responseStreamWeb->c_str());
+		wlog->trace(F("sent %s (%d)"), responseStreamWeb->c_str(), ESP.getMaxFreeBlockSize());
 	}
 
+/* can be tested with:
+   curl -H 'Content-Type: application/json' -X PUT -d '{"targetTemperature":24.5}' http://10.10.200.113/things/thermostat/properties/targetTemperature
+ */
 	void setPropertyValue(AsyncWebServerRequest *request, WDevice *device) {
-		if (!request->hasParam(PARAM_BODY, true)) {
-			if (request->hasParam("plain", true)) wlog->warning(F("Would have plain"));
+		if (!bodyBuffer){
 			wlog->warning(F("Sending HTTP Error 422"));
 			request->send(422); // Unprocessable Entity
 			return;
 		}
-		wlog->notice(F("BODY: %s"), request->getParam(PARAM_BODY, true)->value().c_str());
 		WJsonParser parser;
-		WProperty* property = parser.parse(request->getParam(PARAM_BODY, true)->value().c_str(), device);
+		WProperty* property = parser.parse(bodyBuffer, device);
 		if (property != nullptr) {
 			//response new value
-			wlog->notice(F("Set property value: %s (web request) %s"), property->getId(), request->getParam(PARAM_BODY, true)->value().c_str());
-			WStringStream* response = new WStringStream(SIZE_JSON_PACKET);
-			WJson json(response);
+			wlog->notice(F("Set property value: %s (web request) %s"), property->getId(), bodyBuffer);
+			responseStreamWeb = getResponseStreamWeb();
+			WJson json(responseStreamWeb);
 			json.beginObject();
 			property->toJsonValue(&json);
 			json.endObject();
-			request->send(200, APPLICATION_JSON, response->c_str());
-			delete response;
+			request->send_P(200, APPLICATION_JSON, responseStreamWeb->c_str());			
 		} else {
 			// unable to parse json
-			wlog->notice(F("unable to parse json: %s"), request->getParam(PARAM_BODY, true)->value().c_str());
+			wlog->notice(F("unable to parse json: %s"), bodyBuffer);
 			request->send(500);
 		}
 	}
@@ -1735,6 +1783,11 @@ private:
 	}
 
 	void handleWebSocket() {
+	}
+
+	void logWebAccess(AsyncWebServerRequest *request){
+		wlog->notice(F("Serving: '%s' method %d to %s, maxFree: %d"), request->url().c_str(), request->method(),
+		request->client()->remoteIP().toString().c_str(), ESP.getMaxFreeBlockSize());
 	}
 
 };

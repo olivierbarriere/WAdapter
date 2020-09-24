@@ -3,12 +3,14 @@
 
 #include "WProperty.h"
 
+const char* ATTYPE_TARGETTEMPERATUR PROGMEM = "TargetTemperatureProperty";
+
 class WTargetTemperatureProperty: public WProperty {
 public:
 	WTargetTemperatureProperty(const char* id, const char* title)
 	: WProperty(id, title, DOUBLE) {
-		this->atType = "TargetTemperatureProperty";
-		this->setUnit("celsius");
+		this->atType = ATTYPE_TARGETTEMPERATUR;
+		this->setUnit(STR_CELSIUS);
 	}
 
 

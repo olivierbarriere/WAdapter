@@ -165,7 +165,7 @@ const static char HTTP_HOME_BUTTON[]              PROGMEM = R"=====(
 const static char HTTP_FORM_FIRMWARE[] PROGMEM = R"=====(
 <form method='POST' action='' enctype='multipart/form-data'>
 	<div>
-		<input type='file' accept='.bin' name='update'>
+		<input type='file' accept='.bin, .bin.gz' name='update'>
 	</div>
 	<div>
 		<button type='submit'>Update firmware</button>
@@ -228,6 +228,7 @@ const static char HTTP_CONFIG_SAVE_BUTTON[]         PROGMEM = R"=====(
 </form>
 )=====";
 
+#ifndef MINIMAL
 #define favicon_ico_gz_len 1057
 const uint8_t favicon_ico_gz[] PROGMEM = {
 0x1f, 0x8b, 0x08, 0x00, 0xb3, 0x28, 0x6a, 0x5f, 0x02, 0x03, 0xed, 0x94,
@@ -319,7 +320,7 @@ const uint8_t favicon_ico_gz[] PROGMEM = {
 0x4d, 0xe2, 0x2b, 0x93, 0xc9, 0x7c, 0xbf, 0xff, 0x89, 0xfd, 0x1f, 0xf0,
 0x5f, 0xff, 0x01, 0xff, 0x00, 0xc7, 0x38, 0x6b, 0x38, 0xbe, 0x08, 0x00,
 0x00 };
-
+#endif
 const char* STR_BYTE PROGMEM = " Byte";
 
 void htmlTableRowTitle(AsyncResponseStream* page,  char const* title){

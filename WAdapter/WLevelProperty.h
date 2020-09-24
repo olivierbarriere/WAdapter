@@ -3,11 +3,13 @@
 
 #include "WProperty.h"
 
+const char* ATTYPE_LEVEL PROGMEM = "LevelProperty";
+
 class WLevelProperty: public WProperty {
 public:
 	WLevelProperty(const char* id, const char* title, double minimum, double maximum)
 	: WProperty(id, title, DOUBLE) {
-		this->atType = "LevelProperty";
+		this->atType = ATTYPE_LEVEL;
 		this->minimum = minimum;
 		this->maximum = maximum;
 	}
@@ -29,8 +31,8 @@ public:
 	}
 
 	void toJsonStructureAdditionalParameters(WJson* json) {
-		json->propertyDouble("minimum", this->getMinimum());
-		json->propertyDouble("maximum", this->getMaximum());
+		json->propertyDouble(STR_MINIMUM, this->getMinimum());
+		json->propertyDouble(STR_MAXIMUM, this->getMaximum());
 	}
 
 protected:

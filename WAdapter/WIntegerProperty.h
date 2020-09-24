@@ -3,11 +3,13 @@
 
 #include "WProperty.h"
 
+const char* ATTYPE_INTEGER PROGMEM = "IntegerProperty";
+
 class WIntegerProperty: public WProperty {
 public:
 	WIntegerProperty(const char* id, const char* title)
 	: WProperty(id, title, INTEGER) {
-		this->atType = "IntegerProperty";
+		this->atType = ATTYPE_INTEGER;
 	}
 
 protected:

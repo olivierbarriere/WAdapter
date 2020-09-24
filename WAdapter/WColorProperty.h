@@ -3,11 +3,14 @@
 
 #include "WProperty.h"
 
+
+const char* ATTYPE_COLOR PROGMEM = "ColorProperty";
+
 class WColorProperty: public WProperty {
 public:
 	WColorProperty(const char* id, const char* title, byte red, byte green, byte blue)
 	: WProperty(id, title, STRING, 7) {
-		this->atType = "ColorProperty";
+		this->atType = ATTYPE_COLOR;
 		this->setRGB(red, green, blue);
 		this->changeValue = false;
 	}
