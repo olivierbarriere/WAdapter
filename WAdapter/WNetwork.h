@@ -171,6 +171,7 @@ public:
 		this->lastMqttHassAutodiscoverySent = 0;
 		this->mqttClient = nullptr;
 #endif
+
 		//this->webSocket = nullptr;
 		settings = new WSettings(wlog, appSettingsFlag, false);
 		if (settings->getNetworkSettingsVersion()!=NETWORKSETTINGS_CURRENT){
@@ -471,14 +472,14 @@ true ||
 		//if ((WiFi.status() != WL_CONNECTED) || (!this->isSupportingWebThing())) {
 
 		webServer->on(URI_FIRMWARE, HTTP_POST, [this](AsyncWebServerRequest *request){
-			logWebAccess(request);
+			if (!logWebAccess(request)) return;
 			handleHttpFirmwareUpdateFinished(request);
 		}, [this](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
 			handleHttpFirmwareUpdateProgress(request, filename, index, data, len, final);
 		});
 
 		webServer->on(URI_THINGS, HTTP_PUT, [this](AsyncWebServerRequest *request){
-			logWebAccess(request);
+			if (!logWebAccess(request)) return;
 			handleThings(request);
 			handlePutBodyDone();
 		}, nullptr, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
@@ -488,7 +489,7 @@ true ||
 		// every webServer->on requests 144 Byte of Heap - so save heap
 		webServer->on("", HTTP_GET | HTTP_POST, [this](AsyncWebServerRequest *request){
 			String url=request->url();
-			logWebAccess(request);
+			if (!logWebAccess(request)) return;
 			bool handled=true;
 			if (request->method()==HTTP_GET){
 				if (url.equals("") || 
@@ -570,12 +571,6 @@ true ||
 			} else if (request->method()==HTTP_POST){
 				if (url.equals(URI_FIRMWARE)){
 					// noop - already handled above
-				} else {
-					handled=false;
-				}
-			} else if (request->method()==HTTP_PUT){
-				if (url.startsWith(URI_THINGS)){
-					handleThings(request);
 				} else {
 					handled=false;
 				}
@@ -781,17 +776,6 @@ true ||
 			responseStream->flush();
 		}
 		return responseStream;
-	}
-	WStringStream* getResponseStreamWeb() {
-		if (responseStreamWeb == nullptr) {
-			responseStreamWeb = new WStringStream(SIZE_JSON_PACKET);
-		}
-		if (responseStreamWeb == nullptr){
-			wlog->error(F("getMQTTResponseStreamWeb no space!"));
-		} else {
-			responseStreamWeb->flush();
-		}
-		return responseStreamWeb;
 	}
 
 	void setDesiredModeAp(){
@@ -1577,7 +1561,7 @@ private:
 
 	void sendDevicesStructure(AsyncWebServerRequest* request) {
 		wlog->notice(F("Send description for all devices... %d"), ESP.getFreeHeap());
-		responseStreamWeb = getResponseStreamWeb();
+		WStringStream* responseStreamWeb = new WStringStream(2048);
 		WJson json(responseStreamWeb);
 		json.beginArray();
 		WDevice *device = this->firstDevice;
@@ -1590,19 +1574,21 @@ private:
 		json.endArray();
 		request->send(200, APPLICATION_JSON, responseStreamWeb->c_str());
 		wlog->notice(F("DONE"));
+		delete responseStreamWeb;
 	}
 
 	void sendDeviceStructure(AsyncWebServerRequest *request, WDevice *device) {
 		wlog->notice(F("Send description for device: %s"), device->getId());
-		responseStreamWeb = getResponseStreamWeb();
+		WStringStream* responseStreamWeb = new WStringStream(2048);
 		WJson json(responseStreamWeb);
 		device->toJsonStructure(&json, "", WEBTHING);
 		request->send(200, APPLICATION_JSON, responseStreamWeb->c_str());
+		delete responseStreamWeb;
 	}
 
 	void sendDeviceValues(AsyncWebServerRequest *request, WDevice *device) {
 		wlog->notice(F("Send all properties for device: "), device->getId());
-		responseStreamWeb = getResponseStreamWeb();
+		WStringStream* responseStreamWeb = new WStringStream(512);
 		WJson json(responseStreamWeb);
 		json.beginObject();
 		if (device->isMainDevice()) {
@@ -1613,6 +1599,7 @@ private:
 		device->toJsonValues(&json, WEBTHING);
 		json.endObject();
 		request->send(200, APPLICATION_JSON, responseStreamWeb->c_str());
+		delete responseStreamWeb;
 	}
 
 	void handlePutBodyDone(){
@@ -1733,15 +1720,17 @@ private:
 #endif
 
 	void getPropertyValue(AsyncWebServerRequest *request, WProperty *property) {
-		responseStreamWeb = getResponseStreamWeb();
+		WStringStream* responseStreamWeb = new WStringStream(512);
 		WJson json(responseStreamWeb);
 		json.beginObject();
 		property->toJsonValue(&json);
 		json.endObject();
 		property->setRequested(true);
-		wlog->trace(F("getPropertyValue %s (%d)"), responseStreamWeb->c_str(), ESP.getMaxFreeBlockSize());
-		request->send_P(200, APPLICATION_JSON, responseStreamWeb->c_str());
-		wlog->trace(F("sent %s (%d)"), responseStreamWeb->c_str(), ESP.getMaxFreeBlockSize());
+		//wlog->trace(F("getPropertyValue %s (%d)"), responseStreamWeb->c_str(), ESP.getMaxFreeBlockSize());
+		//request->send_P(200, APPLICATION_JSON, (const uint8_t*)responseStreamWeb->c_str(), strlen(responseStreamWeb->c_str()));
+		request->send(200, APPLICATION_JSON, responseStreamWeb->c_str());
+		//wlog->trace(F("sent %s (%d)"), responseStreamWeb->c_str(), ESP.getMaxFreeBlockSize());
+		delete responseStreamWeb;
 	}
 
 /* can be tested with:
@@ -1758,17 +1747,19 @@ private:
 		if (property != nullptr) {
 			//response new value
 			wlog->notice(F("Set property value: %s (web request) %s"), property->getId(), bodyBuffer);
-			responseStreamWeb = getResponseStreamWeb();
+			WStringStream* responseStreamWeb = new WStringStream(512);
 			WJson json(responseStreamWeb);
 			json.beginObject();
 			property->toJsonValue(&json);
 			json.endObject();
-			request->send_P(200, APPLICATION_JSON, responseStreamWeb->c_str());			
+			request->send_P(200, APPLICATION_JSON, responseStreamWeb->c_str());
+			delete responseStreamWeb;	
 		} else {
 			// unable to parse json
 			wlog->notice(F("unable to parse json: %s"), bodyBuffer);
 			request->send(500);
 		}
+		delete property;
 	}
 
 	WDevice* getDeviceById(const char* deviceId) {
@@ -1785,9 +1776,15 @@ private:
 	void handleWebSocket() {
 	}
 
-	void logWebAccess(AsyncWebServerRequest *request){
-		wlog->notice(F("Serving: '%s' method %d to %s, maxFree: %d"), request->url().c_str(), request->method(),
+	bool logWebAccess(AsyncWebServerRequest *request){
+		wlog->notice(F("Serving: '%s' method %s to %s, maxFree: %d"), request->url().c_str(), request->methodToString(),
 		request->client()->remoteIP().toString().c_str(), ESP.getMaxFreeBlockSize());
+		if (ESP.getMaxFreeBlockSize()<(8*1024)){
+			wlog->notice(F("Dropping Request with 503 Busy"));
+			//request->send(503); // BUSY
+			return false;
+		}
+		return true;
 	}
 
 };

@@ -6,26 +6,15 @@
 class WStringStream : public Stream {
 public:
     
-    WStringStream(unsigned int maxLength, bool keepString) {
-		init(maxLength, keepString);
-    }
 	WStringStream(unsigned int maxLength) {
-		init(maxLength, false);
+		this->maxLength = maxLength;
+		this->string = new char[maxLength + 1];
+		this->flush();
 	}
-    ~WStringStream() {
-    	if ((!keepString) && (this->string)) {
-    		delete[] this->string;
-    	}
-    }
 
-	void init(unsigned int maxLength, bool keepString){
-		this->keepString = keepString;
-		this->string = (char*)malloc(maxLength + 1);
-		if (!this->string){
-			this->maxLength=0;
-		} else {
-			this->maxLength = maxLength;
-			this->flush();
+	~WStringStream() {
+		if (this->string) {
+			delete[] this->string;
 		}
 	}
 
@@ -61,12 +50,6 @@ public:
     	this->position = 0;
     	this->string[0] = '\0';
     }
-
-
-	virtual void webserverSendAndFlush(AsyncResponseStream *stream) {
-		stream->print(this->c_str());
-		this->flush();
-	}
 
     // Print methods
     virtual size_t write(uint8_t c) {
@@ -140,7 +123,6 @@ public:
 
 private:
     char* string;
-    bool keepString;
     unsigned int maxLength;
     unsigned int position;
 };

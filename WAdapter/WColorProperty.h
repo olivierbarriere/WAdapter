@@ -41,7 +41,7 @@ public:
 	}
 
 	const char* createRGBString() {
-		WStringStream result(7, true);
+		WStringStream result(7);
 		result.print("#");
 		char buffer[2];
 		itoa(red, buffer, 16);
