@@ -24,12 +24,16 @@ const char* DEVICE_TYPE_NETWORK PROGMEM = "Network";
 
 const char * STR_NAME PROGMEM = "name";
 const char * STR_THINGS PROGMEM = "/things/";
+const char * STR_LINKS PROGMEM = "links";
+const char * STR_REL PROGMEM = "rel";
 const char * STR_HREF PROGMEM = "href";
 const char * STR_CONTEXT PROGMEM = "@context";
 const char * STR_IOTDOTMOZILLA PROGMEM = "https://iot.mozilla.org/schemas";
 const char * STR_TITLE PROGMEM = "title";
 const char * STR_TYPE PROGMEM = "@type";
 const char * STR_PROPERTIES PROGMEM = "properties";
+
+const char * URI_SEP PROGMEM = "/";
 
 class WNetwork;
 
@@ -130,10 +134,7 @@ public:
 	virtual void toJsonStructure(WJson* json, const char* deviceHRef, WPropertyVisibility visibility) {
 		json->beginObject();
 		json->propertyString(STR_NAME, this->getFullName());
-		String result(deviceHRef);
-		result.concat(STR_THINGS);
-		result.concat(this->getId());
-		json->propertyString(STR_HREF, result.c_str());
+		String href((String)deviceHRef+URI_SEP+this->getId());
 		json->propertyString(STR_CONTEXT, STR_IOTDOTMOZILLA);
 		json->propertyString(STR_TITLE,  this->getFullName());
 		//type
@@ -145,11 +146,17 @@ public:
 		WProperty* property = this->firstProperty;
 		while (property != nullptr) {
 			if (property->isVisible(visibility)) {
-				property->toJsonStructure(json, property->getId(), result.c_str());
+				property->toJsonStructure(json, property->getId(), href.c_str());
 			}
 			property = property->next;
 		}
 		json->endObject();
+		json->beginArray(STR_LINKS);
+		json->beginObject();
+		json->propertyString(STR_REL, STR_PROPERTIES);
+		json->propertyString(STR_HREF, href.c_str(), URI_SEP, STR_PROPERTIES);
+		json->endObject();
+		json->endArray();
 		json->endObject();
 	}
 

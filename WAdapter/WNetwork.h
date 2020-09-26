@@ -43,7 +43,6 @@ const char* CT_TEXT_CSS PROGMEM = "text/css";
 const char* CT_TEXT_JS PROGMEM = "text/javascript";
 const char* CT_IMAGE_ICON PROGMEM = "image/x-icon";
 
-const char* URI_SEP = "/";
 const char* URI_CONFIG PROGMEM = "/config";
 const char* URI_WIFI PROGMEM = "/wifi";
 const char* URI_SAVE PROGMEM = "/save_";
@@ -117,6 +116,8 @@ typedef enum wnWifiMode
 
 WiFiEventHandler gotIpEventHandler, disconnectedEventHandler;
 WiFiClient wifiClient;
+AsyncWebServer *webServer;
+WNetwork *wnetwork;
 #ifndef MINIMAL
 WAdapterMqtt *mqttClient;
 #endif
@@ -146,7 +147,8 @@ public:
 		WiFi.persistent(false);
 		this->applicationName = applicationName;
 		this->firmwareVersion = firmwareVersion;
-		this->webServer = nullptr;
+		webServer = nullptr;
+		wnetwork=this;
 		this->bodyBuffer = nullptr;
 		this->dnsApServer = nullptr;
 		this->debug = debug;
@@ -467,131 +469,9 @@ true ||
 			statusLed = nullptr;
 		}
 
-		this->webServer = new AsyncWebServer(httpPort);
-
-		webServer->onNotFound([this](AsyncWebServerRequest *request){
-			handleUnknown(request);
-		});
-		//if ((WiFi.status() != WL_CONNECTED) || (!this->isSupportingWebThing())) {
-
-		webServer->on(URI_FIRMWARE, HTTP_POST, [this](AsyncWebServerRequest *request){
-			if (!logWebAccess(request)) return;
-			handleHttpFirmwareUpdateFinished(request);
-		}, [this](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
-			handleHttpFirmwareUpdateProgress(request, filename, index, data, len, final);
-		});
-
-		webServer->on(URI_THINGS, HTTP_PUT, [this](AsyncWebServerRequest *request){
-			if (!logWebAccess(request)) return;
-			handleThings(request);
-			handlePutBodyDone();
-		}, nullptr, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-			handlePutBody(request, data, len, index, total);
-		});
-
-		// every webServer->on requests 144 Byte of Heap - so save heap
-		webServer->on("", HTTP_GET | HTTP_POST, [this](AsyncWebServerRequest *request){
-			String url=request->url();
-			if (!logWebAccess(request)) return;
-			bool handled=true;
-			if (request->method()==HTTP_GET){
-				if (url.equals("") || 
-				url.equals(F("/")) || 
-				// Android Captive Portal Detection
-				url.equals(F("/generate_204")) || 
-				// Apple Captive Portal Detection
-				url.equals(F("/hotspot-detect.html"))){
-					request->redirect(URI_CONFIG);
-				} else if (url.equals(URI_CONFIG) || url.equals(((String)URI_CONFIG) + "/")){
-					handleHttpRootRequest(request);
-				} else if (url.equals(URI_WIFI)){
-					handleHttpNetworkConfiguration(request);
-				} else if (url.equals((String)URI_SAVE+ID_NETWORK)){
-					handleHttpsave(request);
-				} else if (url.equals(URI_INFO)){
-					handleHttpInfo(request);
-				} else if (url.equals(URI_RESET)){
-					handleHttpReset(request);
-				} else if (url.equals(URI_FIRMWARE)){
-					handleHttpFirmwareUpdate(request);
-				} else if (url.equals(URI_CSS)){
-				request->send_P(200, CT_TEXT_CSS, PAGE_CSS);
-				} else if (url.equals(URI_JS)){
-					request->send_P(200, CT_TEXT_JS, PAGE_JS);
-#ifndef MINIMAL
-				} else if (url.equals(URI_FAVICON)){
-					AsyncWebServerResponse *response = request->beginResponse_P(200, CT_IMAGE_ICON, favicon_ico_gz, favicon_ico_gz_len);
-					response->addHeader(HEADER_CT_ENCODING, HEADER_CT_ENCODING_GZ);
-					request->send(response);
-#endif
-				} else if (url.startsWith(URI_THINGS)){
-					handleThings(request);
-				} else {
-					handled=false;
-					WDevice *device = this->firstDevice;
-					while (device != nullptr) {
-						String did("/");
-						did.concat(device->getId());
-						String saveDid(URI_SAVE);
-						saveDid.concat(device->getId());
-						if (url.equals(did)){
-							handleHttpDeviceConfiguration(request, device);
-							handled=true;
-							break;
-						} else if (url.equals(saveDid)){
-							handleHttpSaveDeviceConfiguration(request, device);
-							handled=true;
-							break;
-						}
-						if (url.startsWith(did) or url.startsWith(saveDid)){
-							WPage *subpage = device->firstPage;
-							while (subpage != nullptr) {
-								String didSub(did);
-								didSub.concat("_");
-								didSub.concat(subpage->getId());
-								String saveDidSub(URI_SAVE);
-								saveDidSub.concat(did);
-								saveDidSub.concat("_");
-								saveDidSub.concat(subpage->getId());
-								if (url.equals(didSub)){
-									handleHttpDevicePage(request, device, subpage);
-									handled=true;
-									break;
-								}
-								if (url.equals(saveDidSub)){
-									handleHttpDevicePageSubmitted(request, device, subpage);
-									handled=true;
-									break;
-								}
-								subpage = subpage->next;
-							}
-							if (handled) break; // why has c no break(2)
-						}
-						device = device->next;
-					}
-
-				}
-			} else if (request->method()==HTTP_POST){
-				if (url.equals(URI_FIRMWARE)){
-					// noop - already handled above
-				} else {
-					handled=false;
-				}
-			}
-			if (!handled){
-				handleUnknown(request);
-			}
-			wlog->notice(F("Serving: '%s' DONE"), url.c_str(), request->method());
-		});
-
-
-		webServer->on("/ws", HTTP_GET, [this](AsyncWebServerRequest *request){
-				std::bind(&WNetwork::handleWebSocket, this);
-		});
 
 		wlog->notice(F("webServer prepared."));
 
-		webServer->begin();
 		this->notify(false);
 		return;
 	}
@@ -802,9 +682,238 @@ true ||
 		return firmwareVersion;
 	}
 
+	void handleUnknown(AsyncWebServerRequest *request) {
+		wlog->warning(F("Webserver: 404: '%s'"), request->url().c_str());
+		request->send(404, CT_TEXT_PLAIN, F("404: Not found"));
+	}
+
+
+	void handlePutBodyDone(){
+		if (bodyBuffer!=nullptr){
+			Serial.printf("handlePutBodyDone\n");
+			bodyBuffer[0]='\0';
+		}
+	}
+		
+	void handlePutBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+		if (!index){
+			if (bodyBuffer==nullptr){
+				bodyBuffer=(char*)malloc(total+1);
+				bodyBuffer[0]='\0';
+			}
+		}
+		memcpy(bodyBuffer+index, data, len);
+		bodyBuffer[index+len]='\0';
+		//bodyBuffer
+		if (index + len == total){
+		}
+
+	}
+	void handleOnThings(AsyncWebServerRequest *request){
+		if (request->method()!=HTTP_GET && request->method()!=HTTP_PUT){
+			request->send(405); // METHOD NOT ALLOWD
+			return;
+		}
+		bool isPut=(request->method()==HTTP_PUT);
+
+		String uri = request->url();
+		//strip last /
+		if (uri.substring(uri.length() - 1).c_str()[0]=='/') uri[uri.length() - 1]='\0';
+		wlog->trace(F("handleOnThings: uri: '%s'"), uri.c_str());
+
+		if (!uri.startsWith(URI_THINGS)){
+			handleUnknown(request); return;
+		}
+			
+		if (uri.equals(URI_THINGS)){
+			if (!isPut) sendDevicesStructure(request);
+			else request->send(405);
+			return;
+		}
+		if (!uri.startsWith((String)URI_THINGS + (String)URI_SEP)){
+			handleUnknown(request); return;
+		}
+		String devName=uri.substring(((String)URI_THINGS + (String)URI_SEP).length());
+		wlog->trace(F("handleOnThings: devName: '%s'"), devName.c_str());
+		WDevice *device = this->firstDevice;
+		while (device != nullptr) {
+			if (devName.startsWith(device->getId())){
+				// match
+				if (devName.equals(device->getId())){
+					if (!isPut) sendDeviceStructure(request, device);
+					else request->send(405);
+					return;
+				} else if (devName.equals((String)device->getId() + URI_PROPERTIES)){
+					if (!isPut){
+						sendDeviceValues(request, device);
+					} else {
+						setPropertyValue(request, device);
+					}
+					return;
+				} else if (devName.startsWith((String)device->getId() + URI_PROPERTIES + URI_SEP)){
+					String propName=devName.substring(((String)device->getId() + URI_PROPERTIES + URI_SEP).length());
+					wlog->trace(F("handleOnThings: propName: '%s'"), propName.c_str());
+					WProperty * property = device->firstProperty;
+					while (property != nullptr) {
+						if (property->isVisible(WEBTHING)) {
+							if (propName.equals(property->getId())){
+								if (!isPut){
+									getPropertyValue(request, property);
+								} else {
+									setPropertyValue(request, device);
+								}
+								return;
+							}
+						}
+						property = property->next;
+					}
+					wlog->trace(F("handleOnThings: propName: '%s' DONE"), propName.c_str());
+				}
+			}
+			device = device->next;
+		}
+
+		handleUnknown(request);
+		return;
+	}
+
+	void handleOnRoot(AsyncWebServerRequest *request){
+		String url=request->url();
+		if (!logWebAccess(request)) return;
+		bool handled=true;
+		if (request->method()==HTTP_GET){
+			if (url.equals("") || 
+			url.equals(F("/")) || 
+			// Android Captive Portal Detection
+			url.equals(F("/generate_204")) || 
+			// Apple Captive Portal Detection
+			url.equals(F("/hotspot-detect.html"))){
+				request->redirect(URI_CONFIG);
+			} else if (url.equals(URI_CONFIG) || url.equals(((String)URI_CONFIG) + "/")){
+				handleHttpRootRequest(request);
+			} else if (url.equals(URI_WIFI)){
+				handleHttpNetworkConfiguration(request);
+			} else if (url.equals((String)URI_SAVE+ID_NETWORK)){
+				handleHttpsave(request);
+			} else if (url.equals(URI_INFO)){
+				handleHttpInfo(request);
+			} else if (url.equals(URI_RESET)){
+				handleHttpReset(request);
+			} else if (url.equals(URI_FIRMWARE)){
+				handleHttpFirmwareUpdate(request);
+			} else if (url.equals(URI_CSS)){
+			request->send_P(200, CT_TEXT_CSS, PAGE_CSS);
+			} else if (url.equals(URI_JS)){
+				request->send_P(200, CT_TEXT_JS, PAGE_JS);
+#ifndef MINIMAL
+			} else if (url.equals(URI_FAVICON)){
+				AsyncWebServerResponse *response = request->beginResponse_P(200, CT_IMAGE_ICON, favicon_ico_gz, favicon_ico_gz_len);
+				response->addHeader(HEADER_CT_ENCODING, HEADER_CT_ENCODING_GZ);
+				request->send(response);
+#endif
+			} else if (url.startsWith(URI_THINGS)){
+				handleOnThings(request);
+			} else {
+				handled=false;
+				WDevice *device = this->firstDevice;
+				while (device != nullptr) {
+					String did("/");
+					did.concat(device->getId());
+					String saveDid(URI_SAVE);
+					saveDid.concat(device->getId());
+					if (url.equals(did)){
+						handleHttpDeviceConfiguration(request, device);
+						handled=true;
+						break;
+					} else if (url.equals(saveDid)){
+						handleHttpSaveDeviceConfiguration(request, device);
+						handled=true;
+						break;
+					}
+					if (url.startsWith(did) or url.startsWith(saveDid)){
+						WPage *subpage = device->firstPage;
+						while (subpage != nullptr) {
+							String didSub(did);
+							didSub.concat("_");
+							didSub.concat(subpage->getId());
+							String saveDidSub(URI_SAVE);
+							saveDidSub.concat(did);
+							saveDidSub.concat("_");
+							saveDidSub.concat(subpage->getId());
+							if (url.equals(didSub)){
+								handleHttpDevicePage(request, device, subpage);
+								handled=true;
+								break;
+							}
+							if (url.equals(saveDidSub)){
+								handleHttpDevicePageSubmitted(request, device, subpage);
+								handled=true;
+								break;
+							}
+							subpage = subpage->next;
+						}
+						if (handled) break; // why has c no break(2)
+					}
+					device = device->next;
+				}
+
+			}
+		} else if (request->method()==HTTP_POST){
+			if (url.equals(URI_FIRMWARE)){
+				// noop - already handled above
+			} else {
+				handled=false;
+			}
+		}
+		if (!handled){
+			handleUnknown(request);
+		}
+		wlog->notice(F("Serving: '%s' DONE"), url.c_str(), request->method());
+	}
+
+void handleHttpFirmwareUpdateProgress(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+		//Start firmwareUpdate
+		this->updateRunning = true;
+#ifndef MINIMAL
+		//Close existing MQTT connections
+		this->disconnectMqtt();
+#endif
+
+		if (!index){
+			firmwareUpdateError = nullptr;
+			unsigned long free_space = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
+			wlog->notice(F("Update starting: %s"), filename.c_str());
+			Update.runAsync(true);
+			if (!Update.begin(free_space)) {
+				setFirmwareUpdateError("Can't start update (" + String(free_space) + "): ");
+			}
+		}
+		if(!Update.hasError()){
+			if(Update.write(data, len) != len){
+				setFirmwareUpdateError("Can't upload file: ");
+			}
+		}
+		if (final){
+			if (Update.end(true)) { //true to set the size to the current progress
+				wlog->notice(F("Update complete: "));
+			} else {
+				setFirmwareUpdateError("Can't finish update: ");
+			}
+		}
+	}
+
+void handleHttpFirmwareUpdateFinished(AsyncWebServerRequest *request) {
+	if (isWebServerRunning()) {
+		if (Update.hasError()) {
+			this->restart(request, firmwareUpdateError);
+		} else {
+			this->restart(request, F("Update successful."));
+		}
+	}
+}
+
 
 private:
-	AsyncWebServer *webServer;
 	WDevice *firstDevice = nullptr;
 	WDevice *lastDevice = nullptr;
 	WLog* wlog;
@@ -1366,47 +1475,6 @@ private:
 			page->printf_P(HTTP_BODY_END);
 			httpFooter(page);
 			request->send(page);
-					}
-	}
-
-	void handleHttpFirmwareUpdateFinished(AsyncWebServerRequest *request) {
-		if (isWebServerRunning()) {
-			if (Update.hasError()) {
-				this->restart(request, firmwareUpdateError);
-			} else {
-				this->restart(request, F("Update successful."));
-			}
-		}
-	}
-
-	void handleHttpFirmwareUpdateProgress(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
-		//Start firmwareUpdate
-		this->updateRunning = true;
-#ifndef MINIMAL
-		//Close existing MQTT connections
-		this->disconnectMqtt();
-#endif
-
-		if (!index){
-			firmwareUpdateError = nullptr;
-			unsigned long free_space = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
-			wlog->notice(F("Update starting: %s"), filename.c_str());
-			Update.runAsync(true);
-			if (!Update.begin(free_space)) {
-				setFirmwareUpdateError("Can't start update (" + String(free_space) + "): ");
-			}
-		}
-		if(!Update.hasError()){
-			if(Update.write(data, len) != len){
-				setFirmwareUpdateError("Can't upload file: ");
-			}
-		}
-		if (final){
-			if (Update.end(true)) { //true to set the size to the current progress
-				wlog->notice(F("Update complete: "));
-			} else {
-				setFirmwareUpdateError("Can't finish update: ");
-			}
 		}
 	}
 
@@ -1557,145 +1625,7 @@ private:
 		return settingsStored;
 	}
 
-	void handleUnknown(AsyncWebServerRequest *request) {
-		wlog->warning(F("Webserver: 404: '%s'"), request->url().c_str());
-		request->send(404, CT_TEXT_PLAIN, F("404: Not found"));
-	}
 
-	void sendDevicesStructure(AsyncWebServerRequest* request) {
-		wlog->notice(F("Send description for all devices... %d"), ESP.getFreeHeap());
-		WStringStream* responseStreamWeb = new WStringStream(3096);
-		WJson json(responseStreamWeb);
-		json.beginArray();
-		WDevice *device = this->firstDevice;
-		while (device != nullptr) {
-			if (device->isVisible(WEBTHING)) {
-				device->toJsonStructure(&json, "", WEBTHING);
-			}
-			device = device->next;
-		}
-		json.endArray();
-		request->send(200, APPLICATION_JSON, responseStreamWeb->c_str());
-		wlog->notice(F("DONE"));
-		delete responseStreamWeb;
-	}
-
-	void sendDeviceStructure(AsyncWebServerRequest *request, WDevice *device) {
-		wlog->notice(F("Send description for device: %s"), device->getId());
-		WStringStream* responseStreamWeb = new WStringStream(2048);
-		WJson json(responseStreamWeb);
-		device->toJsonStructure(&json, "", WEBTHING);
-		request->send(200, APPLICATION_JSON, responseStreamWeb->c_str());
-		delete responseStreamWeb;
-	}
-
-	void sendDeviceValues(AsyncWebServerRequest *request, WDevice *device) {
-		wlog->notice(F("Send all properties for device: "), device->getId());
-		WStringStream* responseStreamWeb = new WStringStream(512);
-		WJson json(responseStreamWeb);
-		json.beginObject();
-		if (device->isMainDevice()) {
-			json.propertyString(PROP_IDX, getIdx());
-			json.propertyString("ip", getDeviceIp().toString().c_str());
-			json.propertyString("firmware", firmwareVersion.c_str());
-		}
-		device->toJsonValues(&json, WEBTHING);
-		json.endObject();
-		request->send(200, APPLICATION_JSON, responseStreamWeb->c_str());
-		delete responseStreamWeb;
-	}
-
-	void handlePutBodyDone(){
-		if (bodyBuffer!=nullptr){
-			delete[] bodyBuffer;
-			bodyBuffer=nullptr;
-		}
-	}
-	
-	void handlePutBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-		if (!index){
-			if (bodyBuffer==nullptr){
-				bodyBuffer=(char*)malloc(total+1);
-				bodyBuffer[0]='\0';
-			}
-		}
-		memcpy(bodyBuffer+index, data, len);
-		bodyBuffer[index+len]='\0';
-		//bodyBuffer
-		if (index + len == total){
-		}
-
-	}
-
-	void handleThings(AsyncWebServerRequest *request){
-		if (request->method()!=HTTP_GET && request->method()!=HTTP_PUT){
-			request->send(405); // METHOD NOT ALLOWD
-			return;
-		}
-		//request->send(200, CT_TEXT_PLAIN, "HALLO");
-		//return;
-		bool isPut=(request->method()==HTTP_PUT);
-
-		String uri = request->url();
-		//strip last /
-		if (uri.substring(uri.length() - 1).c_str()[0]=='/') uri[uri.length() - 1]='\0';
-		wlog->trace(F("handleThings: uri: '%s'"), uri.c_str());
-
-		if (!uri.startsWith(URI_THINGS)){
-			handleUnknown(request); return;
-		}
-		
-		if (uri.equals(URI_THINGS)){
-			if (!isPut) sendDevicesStructure(request);
-			else request->send(405);
-			return;
-		}
-		if (!uri.startsWith((String)URI_THINGS + (String)URI_SEP)){
-			handleUnknown(request); return;
-		}
-		String devName=uri.substring(((String)URI_THINGS + (String)URI_SEP).length());
-		wlog->trace(F("handleThings: devName: '%s'"), devName.c_str());
-		WDevice *device = this->firstDevice;
-		while (device != nullptr) {
-			if (devName.startsWith(device->getId())){
-				// match
-				if (devName.equals(device->getId())){
-					if (!isPut) sendDeviceStructure(request, device);
-					else request->send(405);
-					return;
-				} else if (devName.equals((String)device->getId() + URI_PROPERTIES)){
-					if (!isPut){
-						sendDeviceValues(request, device);
-					} else {
-						setPropertyValue(request, device);
-					}
-					return;
-				} else if (devName.startsWith((String)device->getId() + URI_PROPERTIES + URI_SEP)){
-					String propName=devName.substring(((String)device->getId() + URI_PROPERTIES + URI_SEP).length());
-					wlog->trace(F("handleThings: propName: '%s'"), propName.c_str());
-					WProperty * property = device->firstProperty;
-					while (property != nullptr) {
-						if (property->isVisible(WEBTHING)) {
-							if (propName.equals(property->getId())){
-								if (!isPut){
-									getPropertyValue(request, property);
-								} else {
-									setPropertyValue(request, device);
-								}
-								return;
-							}
-						}
-						property = property->next;
-					}
-					wlog->trace(F("handleThings: propName: '%s' DONE"), propName.c_str());
-				}
-			}
-			device = device->next;
-		}
-
-		handleUnknown(request);
-		return;
-	}
 
 #ifndef MINIMAL
 	void handleDevicesChangedPropertiesMQTT() {
@@ -1779,9 +1709,48 @@ private:
 		return nullptr;
 	}
 
-	void handleWebSocket() {
+	void sendDevicesStructure(AsyncWebServerRequest* request) {
+		wlog->notice(F("Send description for all devices... %d"), ESP.getFreeHeap());
+		WStringStream* responseStreamWeb = new WStringStream(3096);
+		WJson json(responseStreamWeb);
+		json.beginArray();
+		WDevice *device = this->firstDevice;
+		while (device != nullptr) {
+			if (device->isVisible(WEBTHING)) {
+				device->toJsonStructure(&json, URI_THINGS, WEBTHING);
+			}
+			device = device->next;
+		}
+		json.endArray();
+		request->send(200, APPLICATION_JSON, responseStreamWeb->c_str());
+		wlog->notice(F("DONE"));
+		delete responseStreamWeb;
 	}
 
+	void sendDeviceStructure(AsyncWebServerRequest *request, WDevice *device) {
+		wlog->notice(F("Send description for device: %s"), device->getId());
+		WStringStream* responseStreamWeb = new WStringStream(2048);
+		WJson json(responseStreamWeb);
+		device->toJsonStructure(&json, URI_THINGS, WEBTHING);
+		request->send(200, APPLICATION_JSON, responseStreamWeb->c_str());
+		delete responseStreamWeb;
+	}
+
+	void sendDeviceValues(AsyncWebServerRequest *request, WDevice *device) {
+		wlog->notice(F("Send all properties for device: "), device->getId());
+		WStringStream* responseStreamWeb = new WStringStream(512);
+		WJson json(responseStreamWeb);
+		json.beginObject();
+		if (device->isMainDevice()) {
+			json.propertyString(PROP_IDX, getIdx());
+			json.propertyString("ip", getDeviceIp().toString().c_str());
+			json.propertyString("firmware", firmwareVersion.c_str());
+		}
+		device->toJsonValues(&json, WEBTHING);
+		json.endObject();
+		request->send(200, APPLICATION_JSON, responseStreamWeb->c_str());
+		delete responseStreamWeb;
+	}
 	bool logWebAccess(AsyncWebServerRequest *request){
 		wlog->notice(F("Serving: '%s' method %s to %s, maxFree: %d"), request->url().c_str(), request->methodToString(),
 		request->client()->remoteIP().toString().c_str(), ESP.getMaxFreeBlockSize());
@@ -1795,5 +1764,55 @@ private:
 
 
 };
+
+
+static void staticHandleOnRoot(AsyncWebServerRequest *request){
+	wnetwork->handleOnRoot(request);
+}
+
+
+static void staticHandleOnPostFirmware(AsyncWebServerRequest *request){
+	wnetwork->handleHttpFirmwareUpdateFinished(request);
+}
+
+static void staticHandleOnPostUploadFirmware(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
+	wnetwork->handleHttpFirmwareUpdateProgress(request, filename, index, data, len, final);
+}
+
+static void staticHandleOnPutThings(AsyncWebServerRequest *request){
+	wnetwork->handleOnThings(request);
+	Serial.printf("handleOnThings\n");
+	wnetwork->handlePutBodyDone();
+	Serial.printf("handlePutBodyDone2\n");
+}
+
+static void staticHandleOnPutBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+	Serial.printf("handlePutBody\n");
+	wnetwork->handlePutBody(request, data, len, index, total);
+
+	Serial.printf("staticHandleOnPutBody\n");
+}
+
+static void staticHandleOnNotFound(AsyncWebServerRequest *request){
+	wnetwork->handleUnknown(request);
+}
+
+static void initStatic(){
+	webServer = new AsyncWebServer(httpPort);
+	//webServer->on("/ws", HTTP_GET, [this](AsyncWebServerRequest *request){
+	//		std::bind(&WNetwork::handleWebSocket, this);
+	//});
+	webServer->onNotFound(staticHandleOnNotFound);
+
+	webServer->on(URI_FIRMWARE, HTTP_POST,staticHandleOnPostFirmware, staticHandleOnPostUploadFirmware);
+
+	webServer->on(URI_THINGS, HTTP_PUT, staticHandleOnPutThings, nullptr, staticHandleOnPutBody);
+	
+
+
+	webServer->on("", HTTP_GET | HTTP_POST, staticHandleOnRoot);
+
+	webServer->begin();
+}
 
 #endif

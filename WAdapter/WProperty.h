@@ -20,8 +20,10 @@ const char* STRPROP_READONLY PROGMEM = "readOnly";
 const char* STRPROP_UNIT PROGMEM = "unit";
 const char* STRPROP_MULTIPLEOF PROGMEM = "multipleOf";
 const char* STRPROP_ENUM PROGMEM = "enum";
+const char* STRPROP_LINKS PROGMEM = "links";
 const char* STRPROP_HREF PROGMEM = "href";
-const char* STRPROP_PROPERTIES PROGMEM = "/properties/";
+const char* STRPROP_PROPERTIES PROGMEM = "properties";
+const char* STRPROP_URI_SEP PROGMEM = "/";
 
 enum WPropertyType {
 	BOOLEAN, DOUBLE, INTEGER, LONG, UNSIGNED_LONG, BYTE, STRING
@@ -506,7 +508,12 @@ public:
 			json->propertyString(STRPROP_ATTYPE, (this->getAtType() ?  this->getAtType() : ""));
 		}
 		toJsonStructureAdditionalParameters(json);
-		json->propertyString(STRPROP_HREF, deviceHRef, STRPROP_PROPERTIES, this->getId());
+		json->beginArray(STRPROP_LINKS);
+		json->beginObject();
+		json->propertyString(STRPROP_HREF, deviceHRef, STRPROP_PROPERTIES, STRPROP_URI_SEP, this->getId());
+		json->endObject();
+		json->endArray();
+
 		json->endObject();
 	}
 
