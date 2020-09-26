@@ -53,7 +53,7 @@ public:
 
 	void parse(const char *payload, TProcessKeyValueFunction kvFunction) {
 		this->kvFunction = kvFunction;
-		for (int i = 0; i < strlen(payload); i++) {
+		for (unsigned int i = 0; i < strlen(payload); i++) {
 			parseChar(payload[i]);
 		}
 	}
@@ -61,7 +61,7 @@ public:
 	WProperty* parse(const char *payload, WDevice *device) {
 		this->device = device;
 		WProperty* result = nullptr;
-		for (int i = 0; i < strlen(payload); i++) {
+		for (unsigned int i = 0; i < strlen(payload); i++) {
 			WProperty* p = parseChar(payload[i]);
 			if (p != nullptr) {
 				result = p;

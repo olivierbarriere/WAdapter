@@ -156,7 +156,7 @@ private:
 		size_t size = sizeof logbuf;
 		PGM_P p = reinterpret_cast<PGM_P>(format);
 		char c;
-		int pos=0;
+		unsigned int pos=0;
 		for(; pos < size-1 && (c = pgm_read_byte(p++)) != 0; pos++) {
 				logbuf[pos]=c;	
 		}

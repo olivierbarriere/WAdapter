@@ -12,7 +12,7 @@ public:
 		this->flush();
 	}
 
-	~WStringStream() {
+	virtual ~WStringStream() {
 		if (this->string) {
 			delete[] this->string;
 		}
@@ -24,10 +24,9 @@ public:
     }
 
     virtual int read() {
-		if (this->string==nullptr) return -1;
     	if (position > 0) {
     		char c = string[0];
-    		for (int i = 1; i <= position; i++) {
+    		for (unsigned int i = 1; i <= position; i++) {
     			string[i - 1] = string[i];
     		}
 			position--;
@@ -37,7 +36,6 @@ public:
     }
 
     virtual int peek() {
-		if (this->string==nullptr) -1;
     	if (position > 0) {
     	    char c = string[0];
     	    return c;
@@ -46,7 +44,6 @@ public:
     }
 
     virtual void flush() {
-		if (this->string==nullptr) return;
     	this->position = 0;
     	this->string[0] = '\0';
     }
@@ -92,7 +89,7 @@ public:
 		size_t size = sizeof buf;
 		PGM_P p = reinterpret_cast<PGM_P>(format);
 		char c;
-		int pos=0;
+		unsigned int pos=0;
 		for (; pos < size-1 && (c = pgm_read_byte(p++)) != 0; pos++) {
 				buf[pos]=c;
 		}

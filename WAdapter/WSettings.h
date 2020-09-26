@@ -179,6 +179,15 @@ public:
 					long value = ((four << 0) & 0xFF) + ((three << 8) & 0xFFFF) + ((two << 16) & 0xFFFFFF) + ((one << 24) & 0xFFFFFFFF);
 					property->setLong(value);
 					break;
+				}			
+				case UNSIGNED_LONG: {
+					long four = EEPROM.read(settingItem->address + startAddressReadOffset);
+					long three = EEPROM.read(settingItem->address + startAddressReadOffset + 1);
+					long two = EEPROM.read(settingItem->address + 2);
+					long one = EEPROM.read(settingItem->address + startAddressReadOffset + startAddressReadOffset + 3);
+					long value = ((four << 0) & 0xFF) + ((three << 8) & 0xFFFF) + ((two << 16) & 0xFFFFFF) + ((one << 24) & 0xFFFFFFFF);
+					property->setUnsignedLong(value);
+					break;
 				}
 				case BYTE:
 					property->setByte(EEPROM.read(settingItem->address + startAddressReadOffset));
@@ -326,7 +335,7 @@ public:
 		if (settings2 == nullptr) return;
 		oldProp=settings2->getSetting(id);
 		if (oldProp==nullptr) return;
-		WProperty* setting = getSetting(id);
+		//WProperty* setting = getSetting(id);
 	}
 
 	bool addingNetworkSettings;
@@ -379,6 +388,17 @@ protected:
 			EEPROM.write(settingItem->address + startAddressSaveOffset + 1, l3);
 			EEPROM.write(settingItem->address + startAddressSaveOffset + 2, l2);
 			EEPROM.write(settingItem->address + startAddressSaveOffset + 3, l1);
+			break;
+		case UNSIGNED_LONG:
+			byte ul1, ul2, ul3, ul4;
+			ul4 = (setting->getUnsignedLong() & 0xFF);
+			ul3 = ((setting->getUnsignedLong() >> 8) & 0xFF);
+			ul2 = ((setting->getUnsignedLong() >> 16) & 0xFF);
+			ul1 = ((setting->getUnsignedLong() >> 24) & 0xFF);
+			EEPROM.write(settingItem->address + startAddressSaveOffset, ul4);
+			EEPROM.write(settingItem->address + startAddressSaveOffset + 1, ul3);
+			EEPROM.write(settingItem->address + startAddressSaveOffset + 2, ul2);
+			EEPROM.write(settingItem->address + startAddressSaveOffset + 3, ul1);
 			break;
 		case DOUBLE:
 			EEPROM.put(settingItem->address + startAddressSaveOffset, setting->getDouble());

@@ -336,7 +336,6 @@ public:
 			// Send the header and variable length field
 			uint16_t length = MQTT_MAX_HEADER_SIZE;
 			length = writeString(topic, buffer, length);
-			uint16_t i;
 			uint8_t header = MQTTPUBLISH;
 			if (retained) {
 				header |= 1;
@@ -508,7 +507,7 @@ public:
 		return this->_state;
 	}
 
-	int getMaxPacketSize() {
+	unsigned int getMaxPacketSize() {
 		return this->maxPacketSize;
 	}
 
@@ -643,7 +642,7 @@ private:
 		//const char *idp = string;
 		uint16_t i = 0;
 		pos += 2;
-		for (int b = 0; b < strlen(string); b++) {
+		for (unsigned int b = 0; b < strlen(string); b++) {
 			buf[pos++] = string[b];
 			i++;
 		}

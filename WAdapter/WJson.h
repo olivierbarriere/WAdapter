@@ -26,7 +26,7 @@ public:
 			ifSeparator();
 			separatorAlreadyCalled = true;
 		}
-		if (name != "") {
+		if (name && strlen(name)) {
 			memberName(name);
 		}
 		stream->print(SBEGIN);

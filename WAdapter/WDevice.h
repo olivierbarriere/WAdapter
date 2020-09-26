@@ -203,7 +203,7 @@ public:
     }
 
     virtual bool off() {
-
+		return true;
     }
 
     virtual bool areAllPropertiesRequested() {
@@ -272,7 +272,7 @@ public:
     WPin* firstPin = nullptr;
     WPin* lastPin = nullptr;
     unsigned long lastStateNotify;
-    int stateNotifyInterval;
+    unsigned int stateNotifyInterval;
 protected:
     WNetwork* network;
     WLed* statusLed = nullptr;

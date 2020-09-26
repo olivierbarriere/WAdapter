@@ -70,7 +70,7 @@ public:
 		initialize(id, title, type, length);
 	}
 
-	~WProperty() {
+	virtual ~WProperty() {
 		delete this->id;
 		delete this->title;
 		if (this->unit) {
@@ -419,6 +419,7 @@ public:
 			return String(c_str());
 			break;
 		}
+		return String("");
 
 	}
 
@@ -453,7 +454,7 @@ public:
 	virtual void toJsonStructure(WJson* json, const char* memberName, const char* deviceHRef) {
 		json->beginObject(memberName);
 		//title
-		if (this->getTitle() != "") {
+		if (this->getTitle() && strlen(this->getTitle())) {
 			json->propertyString(STRPROP_TITLE, getTitle());
 		}
 		//type
@@ -477,7 +478,7 @@ public:
 			json->propertyBoolean(STRPROP_READONLY, true);
 		}
 		//unit
-		if (this->getUnit() != "") {
+		if (this->getUnit() && strlen(this->getUnit())) {
 			json->propertyString(STRPROP_UNIT, (this->getUnit() ? this->getUnit() : ""));
 		}
 		//multipleOf
@@ -493,13 +494,15 @@ public:
 				case STRING:
 					json->string(propE->c_str());
 					break;
+				default:
+					break;
 				}
 				propE = propE->next;
 			}
 			json->endArray();
 		}
 		//aType
-		if (this->getAtType() != "") {
+		if (this->getAtType() && strlen(this->getAtType())) {
 			json->propertyString(STRPROP_ATTYPE, (this->getAtType() ?  this->getAtType() : ""));
 		}
 		toJsonStructureAdditionalParameters(json);

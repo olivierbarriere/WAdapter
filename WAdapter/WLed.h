@@ -38,7 +38,7 @@ public:
 		}*/
 	}
 
-	void setOn(bool ledOn, int blinkMillis) {
+	void setOn(bool ledOn, unsigned long blinkMillis) {
 		if ((this->isOn()) && (this->blinkMillis != blinkMillis)) {
 			this->setOn(false);
 		}

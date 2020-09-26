@@ -189,7 +189,7 @@ const static char HTTP_PASSWORD_FIELD[]    PROGMEM = R"=====(
 		<label>%s <small><input type="checkbox" onclick="sp('%s')"> (show password)</small></label><br>
 		<input type='password' name='%s' id='%s' maxlength=%s value='%s'>
 	</div>
-)=====";
+)====="; 
 
 const static char HTTP_CHECKBOX[]         PROGMEM = R"=====(					
 		<div>

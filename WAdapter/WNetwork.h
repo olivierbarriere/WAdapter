@@ -1,6 +1,8 @@
 #ifndef W_NETWORK_H
 #define W_NETWORK_H
 
+#define SSE_MAX_QUEUED_MESSAGES 4
+
 #include <Arduino.h>
 #include <WiFiClient.h>
 #include <ESP8266WiFi.h>
@@ -27,7 +29,7 @@
 #include "webserverHelper.h"
 
 #define SIZE_MQTT_PACKET 1536
-#define SIZE_JSON_PACKET 2048
+#define SIZE_JSON_PACKET 3096
 #define NO_LED -1
 
 const char* ID_NETWORK PROGMEM = "network";
@@ -184,7 +186,7 @@ public:
 #ifndef MINIMAL
 		lastMqttConnect = lastWifiConnect = 0;
 #endif
-		this->wifiModeDesired = (settingsFound &&  getSsid() != "" ? wnWifiMode::WIFIMODE_STATION : wnWifiMode::WIFIMODE_AP);
+		this->wifiModeDesired = (settingsFound && getSsid() && strlen(getSsid()) ? wnWifiMode::WIFIMODE_STATION : wnWifiMode::WIFIMODE_AP);
 		this->wifiModeRunning = wnWifiMode::WIFIMODE_UNSET;
 		lastWifiStatus = -1;
 
@@ -396,6 +398,7 @@ true ||
 		if (isSupportingMqtt() && isSupportingMqttHASS() && isMqttConnected() && isStation() && onMqttHassAutodiscover){
 			return onMqttHassAutodiscover(removeDiscovery);
 		}
+		return true;
 	}
 
 	void setOnMqttHassAutodiscover(THandlerReturnFunctionBool onMqttHassAutodiscover) {
@@ -786,7 +789,7 @@ true ||
 		this->wifiModeDesired = wnWifiMode::WIFIMODE_FALLBACK;
 	}
 	void setDesiredModeStation(){
-		if (getSsid() != "" ) this->wifiModeDesired = wnWifiMode::WIFIMODE_STATION;
+		if (getSsid() && strlen(getSsid()) ) this->wifiModeDesired = wnWifiMode::WIFIMODE_STATION;
 	}
 	String getMacAddress(){
 		return WiFi.macAddress();
@@ -1317,7 +1320,7 @@ private:
 	}
 
 	template<class T, typename ... Args> AsyncResponseStream * httpHeader(AsyncWebServerRequest *request, T title) {
-		return httpHeader(request, title, NULL);
+		return httpHeader(request, title, NULL); 
 	}
 
 	void httpFooter(AsyncResponseStream  *page) {
@@ -1531,7 +1534,7 @@ private:
 
 			wlog->notice(F("SettingsStored!"));
 
-			if (getMqttTopic() == "") {
+			if (!getMqttTopic() || !strlen(getMqttTopic())) {
 				this->mqttBaseTopic->setString(this->getClientName(true).c_str());
 			}
 #ifndef MINIMAL
@@ -1561,7 +1564,7 @@ private:
 
 	void sendDevicesStructure(AsyncWebServerRequest* request) {
 		wlog->notice(F("Send description for all devices... %d"), ESP.getFreeHeap());
-		WStringStream* responseStreamWeb = new WStringStream(2048);
+		WStringStream* responseStreamWeb = new WStringStream(3096);
 		WJson json(responseStreamWeb);
 		json.beginArray();
 		WDevice *device = this->firstDevice;
@@ -1629,6 +1632,8 @@ private:
 			request->send(405); // METHOD NOT ALLOWD
 			return;
 		}
+		//request->send(200, CT_TEXT_PLAIN, "HALLO");
+		//return;
 		bool isPut=(request->method()==HTTP_PUT);
 
 		String uri = request->url();
@@ -1718,6 +1723,7 @@ private:
 		}
 	}
 #endif
+	
 
 	void getPropertyValue(AsyncWebServerRequest *request, WProperty *property) {
 		WStringStream* responseStreamWeb = new WStringStream(512);
@@ -1779,13 +1785,14 @@ private:
 	bool logWebAccess(AsyncWebServerRequest *request){
 		wlog->notice(F("Serving: '%s' method %s to %s, maxFree: %d"), request->url().c_str(), request->methodToString(),
 		request->client()->remoteIP().toString().c_str(), ESP.getMaxFreeBlockSize());
-		if (ESP.getMaxFreeBlockSize()<(8*1024)){
+		if (ESP.getMaxFreeBlockSize()<(16*1024)){
 			wlog->notice(F("Dropping Request with 503 Busy"));
-			//request->send(503); // BUSY
+			request->send(503); // BUSY
 			return false;
 		}
 		return true;
 	}
+
 
 };
 
