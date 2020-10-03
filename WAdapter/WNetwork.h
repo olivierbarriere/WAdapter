@@ -720,7 +720,6 @@ true ||
 		String uri = request->url();
 		//strip last /
 		if (uri.substring(uri.length() - 1).c_str()[0]=='/') uri[uri.length() - 1]='\0';
-		wlog->trace(F("handleOnThings: uri: '%s'"), uri.c_str());
 
 		if (!uri.startsWith(URI_THINGS)){
 			handleUnknown(request); return;
@@ -735,7 +734,6 @@ true ||
 			handleUnknown(request); return;
 		}
 		String devName=uri.substring(((String)URI_THINGS + (String)URI_SEP).length());
-		wlog->trace(F("handleOnThings: devName: '%s'"), devName.c_str());
 		WDevice *device = this->firstDevice;
 		while (device != nullptr) {
 			if (devName.startsWith(device->getId())){
@@ -753,7 +751,6 @@ true ||
 					return;
 				} else if (devName.startsWith((String)device->getId() + URI_PROPERTIES + URI_SEP)){
 					String propName=devName.substring(((String)device->getId() + URI_PROPERTIES + URI_SEP).length());
-					wlog->trace(F("handleOnThings: propName: '%s'"), propName.c_str());
 					WProperty * property = device->firstProperty;
 					while (property != nullptr) {
 						if (property->isVisible(WEBTHING)) {
@@ -768,7 +765,6 @@ true ||
 						}
 						property = property->next;
 					}
-					wlog->trace(F("handleOnThings: propName: '%s' DONE"), propName.c_str());
 				}
 			}
 			device = device->next;
@@ -780,7 +776,7 @@ true ||
 
 	void handleOnRoot(AsyncWebServerRequest *request){
 		String url=request->url();
-		if (!logWebAccess(request)) return;
+		if (!checkAndLogWebAccess(request)) return;
 		bool handled=true;
 		if (request->method()==HTTP_GET){
 			if (url.equals("") || 
@@ -869,7 +865,6 @@ true ||
 		if (!handled){
 			handleUnknown(request);
 		}
-		wlog->notice(F("Serving: '%s' DONE"), url.c_str(), request->method());
 	}
 
 void handleHttpFirmwareUpdateProgress(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
@@ -1751,11 +1746,14 @@ private:
 		request->send(200, APPLICATION_JSON, responseStreamWeb->c_str());
 		delete responseStreamWeb;
 	}
-	bool logWebAccess(AsyncWebServerRequest *request){
-		wlog->notice(F("Serving: '%s' method %s to %s, maxFree: %d"), request->url().c_str(), request->methodToString(),
-		request->client()->remoteIP().toString().c_str(), ESP.getMaxFreeBlockSize());
+	bool checkAndLogWebAccess(AsyncWebServerRequest *request){
+		if (!request->url().startsWith(URI_THINGS)){
+			//avoid crash on webthings parallel requests
+			wlog->notice(F("Serving: '%s' method %s to %s, maxFree: %d"), request->url().c_str(), request->methodToString(),
+			request->client()->remoteIP().toString().c_str(), ESP.getMaxFreeBlockSize());
+		}
 		if (ESP.getMaxFreeBlockSize()<(16*1024)){
-			wlog->notice(F("Dropping Request with 503 Busy"));
+			//wlog->notice(F("Dropping Request with 503 Busy"));
 			request->send(503); // BUSY
 			return false;
 		}
@@ -1769,7 +1767,6 @@ private:
 static void staticHandleOnRoot(AsyncWebServerRequest *request){
 	wnetwork->handleOnRoot(request);
 }
-
 
 static void staticHandleOnPostFirmware(AsyncWebServerRequest *request){
 	wnetwork->handleHttpFirmwareUpdateFinished(request);
@@ -1794,9 +1791,6 @@ static void staticHandleOnNotFound(AsyncWebServerRequest *request){
 
 static void initStatic(){
 	webServer = new AsyncWebServer(httpPort);
-	//webServer->on("/ws", HTTP_GET, [this](AsyncWebServerRequest *request){
-	//		std::bind(&WNetwork::handleWebSocket, this);
-	//});
 	webServer->onNotFound(staticHandleOnNotFound);
 
 	webServer->on(URI_FIRMWARE, HTTP_POST,staticHandleOnPostFirmware, staticHandleOnPostUploadFirmware);
