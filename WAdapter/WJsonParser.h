@@ -472,7 +472,7 @@ private:
 	}
 
 	WProperty* endNumber() {
-		WProperty* result = false;
+		WProperty* result = nullptr;
 		if (currentKey != "") {
 			buffer[bufferPos] = '\0';
 			result = processKeyValue(currentKey.c_str(), buffer);

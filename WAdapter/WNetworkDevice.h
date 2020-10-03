@@ -16,11 +16,13 @@ public:
         this->configNeedsReboot = false;
         this->stateNotifyInterval = 30000;
         this->mainDevice = false;
+        this->setVisibility(MQTT);
 
         lastLongLoop = lastVeryLongLoop = 0;
 		
         /* properties */
         this->rssi = new WProperty("rssi", "rssi", INTEGER);
+        this->rssi->setVisibility(MQTT);
         this->rssi->setReadOnly(true);
         this->rssi->setMqttSendChangedValues(true);
         this->rssi->setOnValueRequest([this](WProperty* p) {updateRssi();});

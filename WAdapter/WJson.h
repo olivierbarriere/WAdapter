@@ -50,6 +50,11 @@ public:
 
 	WJson& endObject() {
 		stream->print(SEND);
+		if (firstElement){
+			// object with no properties
+			firstElement=false;
+			separatorAlreadyCalled=false;
+		}
 		return *this;
 	}
 

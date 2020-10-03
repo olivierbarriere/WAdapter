@@ -151,12 +151,16 @@ public:
 			property = property->next;
 		}
 		json->endObject();
+
+		/*
 		json->beginArray(STR_LINKS);
 		json->beginObject();
 		json->propertyString(STR_REL, STR_PROPERTIES);
 		json->propertyString(STR_HREF, href.c_str(), URI_SEP, STR_PROPERTIES);
 		json->endObject();
 		json->endArray();
+		*/
+	
 		json->endObject();
 	}
 

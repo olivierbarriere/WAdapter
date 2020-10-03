@@ -510,7 +510,7 @@ public:
 		toJsonStructureAdditionalParameters(json);
 		json->beginArray(STRPROP_LINKS);
 		json->beginObject();
-		json->propertyString(STRPROP_HREF, deviceHRef, STRPROP_PROPERTIES, STRPROP_URI_SEP, this->getId());
+		json->propertyString(STRPROP_HREF, deviceHRef, STRPROP_URI_SEP, STRPROP_PROPERTIES, STRPROP_URI_SEP, this->getId());
 		json->endObject();
 		json->endArray();
 

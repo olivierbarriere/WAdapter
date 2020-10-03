@@ -690,15 +690,15 @@ true ||
 
 	void handlePutBodyDone(){
 		if (bodyBuffer!=nullptr){
-			Serial.printf("handlePutBodyDone\n");
-			bodyBuffer[0]='\0';
+			delete[] bodyBuffer;
+			bodyBuffer=nullptr;
 		}
 	}
 		
 	void handlePutBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
 		if (!index){
 			if (bodyBuffer==nullptr){
-				bodyBuffer=(char*)malloc(total+1);
+				bodyBuffer=new char[total+1];
 				bodyBuffer[0]='\0';
 			}
 		}
@@ -706,6 +706,7 @@ true ||
 		bodyBuffer[index+len]='\0';
 		//bodyBuffer
 		if (index + len == total){
+			//Serial.printf("handlePutBody DONE '%s'\n", bodyBuffer);
 		}
 
 	}
@@ -1695,7 +1696,6 @@ private:
 			wlog->notice(F("unable to parse json: %s"), bodyBuffer);
 			request->send(500);
 		}
-		delete property;
 	}
 
 	WDevice* getDeviceById(const char* deviceId) {
@@ -1781,16 +1781,11 @@ static void staticHandleOnPostUploadFirmware(AsyncWebServerRequest *request, Str
 
 static void staticHandleOnPutThings(AsyncWebServerRequest *request){
 	wnetwork->handleOnThings(request);
-	Serial.printf("handleOnThings\n");
 	wnetwork->handlePutBodyDone();
-	Serial.printf("handlePutBodyDone2\n");
 }
 
 static void staticHandleOnPutBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-	Serial.printf("handlePutBody\n");
 	wnetwork->handlePutBody(request, data, len, index, total);
-
-	Serial.printf("staticHandleOnPutBody\n");
 }
 
 static void staticHandleOnNotFound(AsyncWebServerRequest *request){
