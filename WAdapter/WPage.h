@@ -35,7 +35,7 @@ public:
         this->onPrintPage = onPrintPage;
     }
 
-    void setSubmittedPage(TCommandPage onPrintPage) {
+    void setSubmittedPage(TCommandPage onSubmittedPage) {
         this->onSubmittedPage = onSubmittedPage;
     }
 

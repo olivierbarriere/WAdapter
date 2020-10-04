@@ -856,7 +856,7 @@ true ||
 							didSub.concat("_");
 							didSub.concat(subpage->getId());
 							String saveDidSub(URI_SAVE);
-							saveDidSub.concat(did);
+							saveDidSub.concat(device->getId());
 							saveDidSub.concat("_");
 							saveDidSub.concat(subpage->getId());
 							if (url.equals(didSub)){
