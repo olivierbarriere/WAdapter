@@ -1717,7 +1717,7 @@ private:
 	}
 
 	void sendDevicesStructure(AsyncWebServerRequest* request) {
-		wlog->notice(F("Send description for all devices... %d"), ESP.getFreeHeap());
+		wlog->verbose(F("Send description for all devices..."));
 		WStringStream* responseStreamWeb = new WStringStream(3096);
 		WJson json(responseStreamWeb);
 		json.beginArray();
@@ -1730,12 +1730,11 @@ private:
 		}
 		json.endArray();
 		request->send(200, APPLICATION_JSON, responseStreamWeb->c_str());
-		wlog->notice(F("DONE"));
 		delete responseStreamWeb;
 	}
 
 	void sendDeviceStructure(AsyncWebServerRequest *request, WDevice *device) {
-		wlog->notice(F("Send description for device: %s"), device->getId());
+		wlog->verbose(F("Send description for device: %s"), device->getId());
 		WStringStream* responseStreamWeb = new WStringStream(2048);
 		WJson json(responseStreamWeb);
 		device->toJsonStructure(&json, URI_THINGS, WEBTHING);
@@ -1764,7 +1763,7 @@ private:
 			wlog->notice(F("Serving: '%s' method %s to %s, maxFree: %d"), request->url().c_str(), request->methodToString(),
 			request->client()->remoteIP().toString().c_str(), ESP.getMaxFreeBlockSize());
 		}
-		if (ESP.getMaxFreeBlockSize()<(16*1024)){
+		if (ESP.getMaxFreeBlockSize()<(8*1024)){
 			//wlog->notice(F("Dropping Request with 503 Busy"));
 			request->send(503); // BUSY
 			return false;
