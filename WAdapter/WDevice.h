@@ -274,6 +274,13 @@ public:
 	virtual void printInfoPage(AsyncResponseStream* page) {
 	}
 
+	virtual void webserverInitHook(AsyncWebServer *webServer) {
+		return;
+	}
+	virtual void webserverDeinitHook(AsyncWebServer *webServer) {
+		return;
+	}
+
     WDevice* next = nullptr;
     //WebSocketsServer* webSocket;
 	WProperty* firstProperty = nullptr;

@@ -501,8 +501,8 @@ private:
 		if (currentKey != "") {
 			buffer[bufferPos] = '\0';
 			//String value = String(buffer);
-			if (strcasecmp(buffer, "true") == 0) {
-				result = processKeyValue(currentKey.c_str(), "true");
+			if (strcasecmp(buffer, JSON_TRUE) == 0) {
+				result = processKeyValue(currentKey.c_str(), JSON_TRUE);
 			}
 		}
 		bufferPos = 0;
@@ -515,8 +515,8 @@ private:
 		if (currentKey != "") {
 			buffer[bufferPos] = '\0';
 			//String value = String(buffer);
-			if (strcasecmp(buffer, "false") == 0) {
-				result = processKeyValue(currentKey.c_str(), "false");
+			if (strcasecmp(buffer, JSON_FALSE) == 0) {
+				result = processKeyValue(currentKey.c_str(), JSON_FALSE);
 			}
 		}
 		bufferPos = 0;
@@ -527,7 +527,7 @@ private:
 	void endNull() {
 		buffer[bufferPos] = '\0';
 		String value = String(buffer);
-		if (value.equals("null")) {
+		if (value.equals(JSON_NULL)) {
 			//myListener->value("null");
 		} else {
 			// throw new ParsingError($this->_line_number, $this->_char_number,

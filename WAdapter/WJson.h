@@ -11,6 +11,10 @@ const static char SBEGIN = '{';
 const static char SEND = '}';
 const static char QUOTE = '\"';
 
+const char* JSON_TRUE PROGMEM = "true";
+const char* JSON_FALSE PROGMEM = "false";
+const char* JSON_NULL PROGMEM = "null";
+
 class WJson {
 public:
 	WJson(Print* stream) {
@@ -275,14 +279,14 @@ public:
 
 	WJson& null() {
 		ifSeparator();
-		stream->print("null");
+		stream->print(JSON_NULL);
 		return *this;
 	}
 
 	WJson& boolean(bool value) {
 		if (!separatorAlreadyCalled)
 			ifSeparator();
-		stream->print(value ? "true" : "false");
+		stream->print(value ? JSON_TRUE : JSON_FALSE);
 		return *this;
 	}
 

@@ -176,7 +176,6 @@ public:
 		this->mqttClient = nullptr;
 #endif
 
-		//this->webSocket = nullptr;
 		settings = new WSettings(wlog, appSettingsFlag, false);
 		if (settings->getNetworkSettingsVersion()!=NETWORKSETTINGS_CURRENT){
 			wlog->trace(F("loading oldSettings (network: %d)"), settings->getNetworkSettingsVersion());
@@ -354,16 +353,13 @@ true ||
 		if (restartFlag!=nullptr) {
 			wlog->notice(F("Restart flag: '%s'"), restartFlag);
 			this->updateRunning = false;
+			delay(1000);
 			stopWebServer();
 			delay(1000);
 			ESP.restart();
 			delay(2000);
 		}
-#ifndef MINIMAL
-		if (lastMqttHassAutodiscoverySent==0){
-				if (sendMqttHassAutodiscover(false) ) lastMqttHassAutodiscoverySent=now;
-		}
-#endif
+
 		if (WiFi.status() != lastWifiStatus){
 			wlog->notice(F("WiFi: Status changed from %d to %d"), lastWifiConnect, WiFi.status());
 			lastWifiStatus = WiFi.status(); 
@@ -421,7 +417,7 @@ true ||
 				return false;
 			}
 		} else {
-			wlog->notice(F("MQTT not connected... "));
+			wlog->notice(F("MQTT not connected..."));
 			if (strcmp(getMqttServer(), "") != 0) {
 				wlog->verbose(F("Can't send MQTT. Not connected to server: %s"), getMqttServer());
 			}
@@ -498,9 +494,10 @@ true ||
 
 	void stopWebServer() {
 		if (this->updateRunning) return;
+		initWebserverDeinitHooks(webServer);
+		delay(100);
 		if ((isWebServerRunning())) {
 			wlog->notice(F("stopWebServer"));
-			delay(100);
 			webServer->end();
 			this->notify(false);
 		}
@@ -509,10 +506,7 @@ true ||
 		disconnectMqtt();
 #endif
 		wlog->notice(F("kill"));
-		if (webServer!=nullptr){
-			delete webServer;
-			webServer = nullptr;
-		}
+		webServer->end();
 		if (onConfigurationFinished) {
 			onConfigurationFinished();
 		}
@@ -639,10 +633,6 @@ true ||
 			this->lastDevice = device;
 		}
 
-		/*ToDo
-		AsyncWebSocket *webSocket = new AsyncWebSocket("/things/" + device->getId());
-		device->setWebSocket(webSocket);
-		*/
 	}
 
 	WLog* log() {
@@ -687,6 +677,22 @@ true ||
 		request->send(404, CT_TEXT_PLAIN, F("404: Not found"));
 	}
 
+	void initWebserverInitHooks(AsyncWebServer *webServer){
+		WDevice *device = this->firstDevice;
+		while (device != nullptr) {
+			device->webserverInitHook(webServer);
+			device = device->next;
+		}
+
+	}
+	void initWebserverDeinitHooks(AsyncWebServer *webServer){
+		WDevice *device = this->firstDevice;
+		while (device != nullptr) {
+			device->webserverDeinitHook(webServer);
+			device = device->next;
+		}
+
+	}
 
 	void handlePutBodyDone(){
 		if (bodyBuffer!=nullptr){
@@ -791,7 +797,7 @@ true ||
 			} else if (url.equals(URI_WIFI)){
 				handleHttpNetworkConfiguration(request);
 			} else if (url.equals((String)URI_SAVE+ID_NETWORK)){
-				handleHttpsave(request);
+				handleHttpSave(request);
 			} else if (url.equals(URI_INFO)){
 				handleHttpInfo(request);
 			} else if (url.equals(URI_RESET)){
@@ -1103,6 +1109,12 @@ private:
 				wlog->notice(F("Subscribing to Topic %s"),subscribeTopic.c_str());
 				mqttClient->subscribe(subscribeTopic.c_str());
 				notify(false);
+
+#ifndef MINIMAL
+				if (lastMqttHassAutodiscoverySent==0){
+						if (sendMqttHassAutodiscover(false) ) lastMqttHassAutodiscoverySent=now();
+				}
+#endif
 				return true;
 			} else {
 				wlog->notice(F("Connection to MQTT server failed, rc=%d"), mqttClient->state());
@@ -1164,7 +1176,7 @@ private:
 				}
 				page->printf_P(HTTP_BUTTON, "firmware", "get", F("Update firmware"));
 				page->printf_P(HTTP_BUTTON, "info", "get", "Info");
-				page->printf_P(HTTP_BUTTON, "reset", "post", "Reboot");
+				page->printf_P(HTTP_BUTTON, "reset", "get", "Reboot");
 				httpFooter(page);
 				request->send(page);
 			} else {
@@ -1249,7 +1261,7 @@ private:
 		}
 	}
 
-	void handleHttpsave(AsyncWebServerRequest *request) {
+	void handleHttpSave(AsyncWebServerRequest *request) {
 		if (isWebServerRunning()) {
 #ifndef MINIMAL
 			// remove old autoconfiguration
@@ -1789,15 +1801,14 @@ static void staticHandleOnNotFound(AsyncWebServerRequest *request){
 	wnetwork->handleUnknown(request);
 }
 
+
 static void initStatic(){
 	webServer = new AsyncWebServer(httpPort);
 	webServer->onNotFound(staticHandleOnNotFound);
-
 	webServer->on(URI_FIRMWARE, HTTP_POST,staticHandleOnPostFirmware, staticHandleOnPostUploadFirmware);
-
 	webServer->on(URI_THINGS, HTTP_PUT, staticHandleOnPutThings, nullptr, staticHandleOnPutBody);
-	
 
+	wnetwork->initWebserverInitHooks(webServer);
 
 	webServer->on("", HTTP_GET | HTTP_POST, staticHandleOnRoot);
 
