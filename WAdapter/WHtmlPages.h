@@ -157,7 +157,7 @@ const static char HTTP_SAVED[]              PROGMEM = R"=====(
 const static char HTTP_HOME_BUTTON[]              PROGMEM = R"=====(
 <div>
 	<form action='/config' method='get'>
-		<button>Back to configuration</button>
+		<button>Back to Home</button>
 	</form>
 </div>
 )=====";
@@ -180,14 +180,21 @@ const static char HTTP_CONFIG_PAGE_BEGIN[]         PROGMEM = R"=====(
 const static char HTTP_TEXT_FIELD[]    PROGMEM = R"=====(
 	<div>
 		%s<br>
-		<input type='text' name='%s' maxlength=%s value='%s'>
+		<input type='text' name='%s' maxlength=%d value='%s'>
+	</div>
+)=====";
+
+const static char HTTP_TEXT_FIELD_INTEGER[]    PROGMEM = R"=====(
+	<div>
+		%s<br>
+		<input type='text' name='%s' maxlength=%d value='%d'>
 	</div>
 )=====";
 
 const static char HTTP_PASSWORD_FIELD[]    PROGMEM = R"=====(
 	<div>
 		<label>%s <small><input type="checkbox" onclick="sp('%s')"> (show password)</small></label><br>
-		<input type='password' name='%s' id='%s' maxlength=%s value='%s'>
+		<input type='password' name='%s' id='%s' maxlength=%d value='%s'>
 	</div>
 )====="; 
 
@@ -227,6 +234,25 @@ const static char HTTP_CONFIG_SAVE_BUTTON[]         PROGMEM = R"=====(
 		</div>
 </form>
 )=====";
+const static char HTTP_CONFIG_SAVEANDREBOOT_BUTTON[]         PROGMEM = R"=====(	
+		<div>
+			<button type='submit'>Save config and reboot</button>
+		</div>
+</form>
+)=====";
+const static char HTTP_THERM_INFO[]         PROGMEM = R"=====(	
+		<br>
+		If you have any questions see documentation at<br>
+		<a href="https://github.com/fashberg/WThermostatBeca/blob/master/Configuration.md" target="_blank">https://github.com/fashberg/WThermostatBeca/blob/master/Configuration.md</a>
+		<br>
+		<br>
+)=====";
+const static char HTTP_THERM_DEADZONE[]         PROGMEM = R"=====(	
+		<small>Hint: Set this paramter to the same value which is confired at thermostat settings. Value between 1 and 5 degree Celsius, default is 1. If you do not have the Relay Hardware hack we need to know this 
+		setting to calculate the state of the Heating Relay</small><br>
+</form>
+)=====";
+
 
 #ifndef MINIMAL
 #define favicon_ico_gz_len 1057

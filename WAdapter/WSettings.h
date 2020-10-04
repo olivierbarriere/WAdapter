@@ -27,6 +27,9 @@ const int NETWORKSETTINGS_PRE_109 = 2;
 const int NETWORKSETTINGS_PRE_FAS114 = 3;
 const int NETWORKSETTINGS_CURRENT = 4;
 
+
+const int APPLICATIONSETTINGS_UNKNOWN = 0;
+
 class WSettings {
 public:
 	WSettings(WLog* log, byte appSettingsFlag, bool compatMode) {
@@ -34,19 +37,24 @@ public:
 		this->appSettingsFlag = appSettingsFlag;
 		this->addingNetworkSettings = true;
 		this->_settingsNeedsUpdate=true;
+		this->_compatMode=compatMode;
 		EEPROM.begin(EEPROM_SIZE);
 		uint8_t epromStored = EEPROM.read(0);
 		this->log->trace(F("settings: old byte 0: 0x%02x"), epromStored);
 		this->_existsSettingsNetwork = false;
 		this->_existsSettingsApplication = false;		
 		this->_networkSettingsVersion=NETWORKSETTINGS_UNKNOWN;
+		this->_applicationSettingsVersion=APPLICATIONSETTINGS_UNKNOWN;
 		if (epromStored==FLAG_OPTIONS_NETWORK){
+			this->log->trace(F("settings: NetworksSettings found in Current Version"));
 			// klaus >=1.09 and fas >=1.14-fas
 			this->_existsSettingsNetwork = true;
 			this->_networkSettingsVersion=NETWORKSETTINGS_CURRENT;
 			uint8_t epromStoredApplication = EEPROM.read(1);
 			this->log->trace(F("settings: old byte 1: 0x%02x"), epromStoredApplication);
+			this->_applicationSettingsVersion=epromStoredApplication;
 			if (epromStoredApplication == this->appSettingsFlag){
+				this->log->trace(F("settings: ApplicationSettings found in Current Version"));
 				this->_existsSettingsApplication = true;
 				this->_settingsNeedsUpdate=false;
 			}			
@@ -63,7 +71,7 @@ public:
 			}
 		}
 
-		this->log->trace(F("WSettings done, networkSettingsVersion: %d"), this->_networkSettingsVersion);
+		this->log->trace(F("WSettings done, networkSettingsVersion: %d, app: %d"), this->getNetworkSettingsVersion(), this->getApplicationSettingsVersion());
 		EEPROM.end();
 	}
 
@@ -112,6 +120,12 @@ public:
 	unsigned int getNetworkSettingsVersion(){
 		return this->_networkSettingsVersion;
 	}
+	unsigned int getApplicationSettingsVersion(){
+		return this->_applicationSettingsVersion;
+	}
+	unsigned int getApplicationSettingsCurrent(){
+		return this->appSettingsFlag;
+	}
 
 	int getCurrentSettingsAddress(){
 		return (this->lastSetting != nullptr ?  this->lastSetting->address : 0);
@@ -144,9 +158,9 @@ public:
 		if (!exists(property)) {
 			WSettingItem* settingItem = addSetting(property);
 				if (((settingItem->networkSetting) && (this->existsSettingsNetwork())) ||
-				((!settingItem->networkSetting) && (this->existsSettingsApplication()))) {
+				((!settingItem->networkSetting) && (this->existsSettingsApplication() || this->_compatMode))) {
 
-				log->trace(F("Loading setting: Adrress=%d, Id='%s', size=%d, MEM: %d"),
+				log->trace(F("Loading setting: Address=%d, Id='%s', size=%d, MEM: %d"),
 					settingItem->address + startAddressReadOffset, property->getId(), property->getLength(), EEPROM_SIZE);
 				if (settingItem->address + startAddressReadOffset + property->getLength() > EEPROM_SIZE){
 					log->error(F("Cannot add EPROM property. Size too small, Adrress=%d, Id='%s', size=%d, MEM: %d"),
@@ -194,11 +208,14 @@ public:
 					break;
 				case STRING:
 					const char* rs = readString(settingItem->address + startAddressReadOffset, property->getLength());
+					log->trace(F("String loaded: '%s'"), rs);
 					property->setString(rs);
 					delete rs;
 					break;
 				}
 				EEPROM.end();
+			} else {
+				log->trace(F("NOT Loading setting %s (!current)"), property->getId());
 			}
 			property->setSettingsNotification([this](WProperty* property) {save(property);});
 		}
@@ -415,7 +432,9 @@ private:
 	byte appSettingsFlag;
 	bool _existsSettingsNetwork, _existsSettingsApplication;
 	bool _settingsNeedsUpdate;
+	bool _compatMode;
 	unsigned int _networkSettingsVersion;
+	unsigned int _applicationSettingsVersion;
 	WSettingItem* firstSetting = nullptr;
 	WSettingItem* lastSetting = nullptr;
 

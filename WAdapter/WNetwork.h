@@ -95,6 +95,8 @@ const char* PROP_MQTTPORT PROGMEM = "mqttPort";
 const char* PROP_MQTTUSER PROGMEM = "mqttUser";
 const char* PROP_MQTTPASSWORD PROGMEM = "mqttPassword";
 const char* PROP_MQTTTOPIC PROGMEM = "mqttTopic";
+const char* PROP_MQTTSTATETOPIC PROGMEM = "mqttStateTopic";
+const char* PROP_MQTTSETTOPIC PROGMEM = "mqttSetTopic";
 
 #ifdef DEBUG
 const int maxApRunTimeMinutes = 2;
@@ -177,8 +179,8 @@ public:
 #endif
 
 		settings = new WSettings(wlog, appSettingsFlag, false);
-		if (settings->getNetworkSettingsVersion()!=NETWORKSETTINGS_CURRENT){
-			wlog->trace(F("loading oldSettings (network: %d)"), settings->getNetworkSettingsVersion());
+		if (settings->getNetworkSettingsVersion()!=NETWORKSETTINGS_CURRENT || settings->getApplicationSettingsVersion()!=appSettingsFlag){
+			wlog->trace(F("loading oldSettings (network: %d, app: %d)"), settings->getNetworkSettingsVersion(), settings->getApplicationSettingsVersion());
 			settingsOld = new WSettings(wlog, appSettingsFlag, true);
 		} else {
 			settingsOld = nullptr;
@@ -194,6 +196,7 @@ public:
 
 		gotIpEventHandler = WiFi.onStationModeGotIP(
 				[this](const WiFiEventStationModeGotIP &event) {
+					this->logHeap("WiFi Station connected");
 					wlog->notice(F("WiFi: Station connected, IP: %s"), this->getDeviceIp().toString().c_str());
 					this->connectFailCounter=0;
 					startMDNS();
@@ -283,18 +286,21 @@ true ||
 			
 			if (wifiModeDesired == wnWifiMode::WIFIMODE_STATION){
 				wlog->trace(F("Starting Station Mode"));
+				logHeap(PSTR("StationMode"));
 				wifiModeRunning = wifiModeDesired;
 				lastWifiConnect = 0;
 			}
 		}
 		if (wifiModeRunning == wnWifiMode::WIFIMODE_STATION && 
 			WiFi.status() != WL_CONNECTED	&& (lastWifiConnect == 0 || now - lastWifiConnect > 20 * 1000)){
+			logHeap(PSTR("BeforeWifiConnect"));
 			wlog->notice(F("WiFi: Connecting to '%s', using Hostname '%s'"), getSsid(), getHostName().c_str());
 			wlog->notice(F("WiFi: SSID/PSK/Hostname '%s'/'%s'/'%s' (strlen %d/%d/%d)"), getSsid(), getPassword(), getHostName().c_str(),
 				strlen(getSsid()), strlen(getPassword()), strlen(getHostName().c_str()));
 			WiFi.mode(WIFI_STA);
 			WiFi.hostname(getHostName());
 			WiFi.begin(getSsid(), getPassword());
+			logHeap(PSTR("Wifi.begin"));
 			apStartedAt=0;
 			lastWifiConnect = now;
 		}
@@ -362,6 +368,7 @@ true ||
 
 		if (WiFi.status() != lastWifiStatus){
 			wlog->notice(F("WiFi: Status changed from %d to %d"), lastWifiConnect, WiFi.status());
+			this->logHeap("WiFi Status");
 			lastWifiStatus = WiFi.status(); 
 			this->notify( (WiFi.status() == wl_status_t::WL_CONNECTED) );
 		}
@@ -480,9 +487,11 @@ true ||
 					//String mdnsName = getHostName() + ".local";
 					String mdnsName = this->getDeviceIp().toString();
 					wlog->notice(F("MDNS init, name: %s"), mdnsName.c_str());
+					logHeap(PSTR("MDNS Init"));
 					MDNS.end();
 					if (MDNS.begin(mdnsName)) {
 						wlog->notice(F("MDNS OK"));
+						logHeap(PSTR("MDNS OK"));
 						MDNS.addService(STR_HTTP, STR_TCP, httpPort);
 						MDNS.addServiceTxt(STR_HTTP, STR_TCP, STR_URL, (String)STR_HTTP + "://" + mdnsName + (String)URI_THINGS);
 						MDNS.addServiceTxt(STR_HTTP, STR_TCP, STR_WEBTHING, STR_TRUE);
@@ -637,6 +646,13 @@ true ||
 
 	WLog* log() {
 		return wlog;
+	}
+
+	void logHeap(const char * s){
+		this->log()->trace(F("Heap Info %s: MaxFree: %d"), s, ESP.getMaxFreeBlockSize());
+	}
+	void logHeap(){
+		this->log()->trace(F("Heap Info: MaxFree: %d"), ESP.getMaxFreeBlockSize());
 	}
 
 	WStringStream* getMQTTResponseStream() {
@@ -1071,8 +1087,11 @@ private:
 			&& (!mqttClient->connected())
 			&& (strcmp(getMqttServer(), "") != 0)
 			&& (strcmp(getMqttPort(), "") != 0)) {
+			logHeap(PSTR("mqttReconnect"));
 			wlog->notice(F("Connect to MQTT server: %s; user: '%s'; password: '%s'; clientName: '%s'"),
 					getMqttServer(), getMqttUser(), getMqttPassword(), getClientName(true).c_str());
+
+			
 			// Attempt to connect
 			this->mqttClient->setServer(getMqttServer(), String(getMqttPort()).toInt());
 			if (mqttClient->connect(getClientName(true).c_str(),
@@ -1082,12 +1101,15 @@ private:
 					"Offline", true// willMessage, cleanSession
 					)) { //(mqttPassword != "" ? mqttPassword.c_str() : NULL))) {
 				wlog->notice(F("Connected to MQTT server."));
+				logHeap(PSTR("MQTT Connected"));
 
 				// send Online
 				mqttClient->publish(((String)getMqttTopic()+"/"+MQTT_TELE+"/LWT").c_str(), "Online", true);
+				logHeap(PSTR("MQTT publish"));
 
 				//Send device structure and status
 				mqttClient->subscribe("devices/#");
+				logHeap(PSTR("subscribed"));
 
 				WDevice *device = this->firstDevice;
 				while (device != nullptr) {
@@ -1104,10 +1126,12 @@ private:
 					device = device->next;
 				}
 				mqttClient->unsubscribe("devices/#");
+				logHeap(PSTR("devices"));
 				//Subscribe to device specific topic
 				String subscribeTopic=String(String(getMqttTopic()) + "/" + String(MQTT_CMND) + "/#");
 				wlog->notice(F("Subscribing to Topic %s"),subscribeTopic.c_str());
 				mqttClient->subscribe(subscribeTopic.c_str());
+				logHeap(PSTR("topicSubscribe"));
 				notify(false);
 
 #ifndef MINIMAL
@@ -1234,20 +1258,20 @@ private:
 			printHttpCaption(page);
 			page->printf_P(HTTP_CONFIG_PAGE_BEGIN, ID_NETWORK);
 			page->printf_P(HTTP_PAGE_CONFIGURATION_STYLE, (this->isSupportingMqtt() ? F("block") : F("none")));
-			page->printf_P(HTTP_TEXT_FIELD, F("Hostname/Idx:"), "i", "16", getIdx());
-			page->printf_P(HTTP_TEXT_FIELD, F("Wifi ssid (only 2.4G):"), "s", "32", getSsid());
-			page->printf_P(HTTP_PASSWORD_FIELD, F("Wifi password:"), "p", "p", "p", "32", (strlen(getPassword()) ?  FORM_PW_NOCHANGE : ""));
+			page->printf_P(HTTP_TEXT_FIELD, F("Hostname/Idx:"), "i", 16, getIdx());
+			page->printf_P(HTTP_TEXT_FIELD, F("Wifi ssid (only 2.4G):"), "s", 32, getSsid());
+			page->printf_P(HTTP_PASSWORD_FIELD, F("Wifi password:"), "p", "p", "p", 32, (strlen(getPassword()) ?  FORM_PW_NOCHANGE : ""));
 			page->printf_P(HTTP_PAGE_CONFIGURATION_OPTION, "apfb", (this->isSupportingApFallback() ? HTTP_CHECKED : ""),
 			"", HTTP_PAGE_CONFIIGURATION_OPTION_APFALLBACK);
 			//mqtt
 			page->printf_P(HTTP_PAGE_CONFIGURATION_OPTION, "mq", (this->isSupportingMqtt() ? HTTP_CHECKED : ""), 
 				F("id='mqttEnabled'onclick='hideMqttGroup()'"), HTTP_PAGE_CONFIIGURATION_OPTION_MQTT);
 			page->printf_P(HTTP_PAGE_CONFIGURATION_MQTT_BEGIN);
-			page->printf_P(HTTP_TEXT_FIELD, F("MQTT Server:"), "ms", "32", getMqttServer());
-			page->printf_P(HTTP_TEXT_FIELD, F("MQTT Port:"), "mo", "4", getMqttPort());
-			page->printf_P(HTTP_TEXT_FIELD, F("MQTT User:"), "mu", "16", getMqttUser());
-			page->printf_P(HTTP_PASSWORD_FIELD, F("MQTT Password:"), "mp", "mp", "mp", "32", (strlen(getMqttPassword()) ?  FORM_PW_NOCHANGE : ""));
-			page->printf_P(HTTP_TEXT_FIELD, F("Topic, e.g.'home/room':"), "mt", "32", getMqttTopic());
+			page->printf_P(HTTP_TEXT_FIELD, F("MQTT Server:"), "ms", 32, getMqttServer());
+			page->printf_P(HTTP_TEXT_FIELD, F("MQTT Port:"), "mo", 4, getMqttPort());
+			page->printf_P(HTTP_TEXT_FIELD, F("MQTT User:"), "mu", 16, getMqttUser());
+			page->printf_P(HTTP_PASSWORD_FIELD, F("MQTT Password:"), "mp", "mp", "mp", 32, (strlen(getMqttPassword()) ?  FORM_PW_NOCHANGE : ""));
+			page->printf_P(HTTP_TEXT_FIELD, F("Topic, e.g.'home/room':"), "mt", 32, getMqttTopic());
 
 			page->printf_P(HTTP_PAGE_CONFIGURATION_OPTION, F("mqhass"), (this->isSupportingMqttHASS() ? HTTP_CHECKED : ""),
 				"", HTTP_PAGE_CONFIIGURATION_OPTION_MQTTHASS);
@@ -1255,7 +1279,8 @@ private:
 				"", HTTP_PAGE_CONFIIGURATION_OPTION_MQTTSINGLEVALUES);
 
 			page->printf_P(HTTP_PAGE_CONFIGURATION_MQTT_END);
-			page->printf_P(HTTP_CONFIG_SAVE_BUTTON);
+			page->printf_P(HTTP_CONFIG_SAVEANDREBOOT_BUTTON);
+			page->printf_P(HTTP_HOME_BUTTON);
 			httpFooter(page);
 			request->send(page);
 		}
@@ -1566,9 +1591,23 @@ private:
 				settingsOld->setString(PROP_MQTTTOPIC, 64, "");
 				if (settingsOld->getNetworkSettingsVersion()==NETWORKSETTINGS_PRE_109){
 					wlog->notice(F("Reading NetworkSettings PRE_109"));
-					settingsOld->setString("mqttStateTopic", 16, DEFAULT_TOPIC_STATE); // unused
-					settingsOld->setString("mqttSetTopic", 16, DEFAULT_TOPIC_SET); // unused
+					settingsOld->setString(PROP_MQTTSTATETOPIC, 16, DEFAULT_TOPIC_STATE); // unused
+					settingsOld->setString(PROP_MQTTSETTOPIC, 16, DEFAULT_TOPIC_SET); // unused
 				}
+			} else {
+				// network settings is the same - but application differs. We need to fill settingsOld
+				wlog->notice(F("Reading NetworkSettings CURRENT"));
+				settingsOld->setString(PROP_IDX, 16, "");
+				settingsOld->setString(PROP_SSID, 32, "");
+				settingsOld->setString(PROP_PASSWORD, 32, "");
+				settingsOld->setByte(PROP_NETBITS1, (NETBITS1_MQTT | NETBITS1_HASS));
+				settingsOld->setString(PROP_MQTTSERVER, 32, "");
+				settingsOld->setString(PROP_MQTTPORT, 4, "1883");
+				settingsOld->setString(PROP_MQTTUSER, 16, "");
+				settingsOld->setString(PROP_MQTTPASSWORD, 32, "");
+				settingsOld->setString(PROP_MQTTTOPIC, 32, "");
+				settingsOld->setString(PROP_MQTTSTATETOPIC, 16, DEFAULT_TOPIC_STATE); // unused
+				settingsOld->setString(PROP_MQTTSETTOPIC, 16, DEFAULT_TOPIC_SET); // unused
 			}
 			settingsOld->addingNetworkSettings = false;
 		}
@@ -1743,7 +1782,7 @@ private:
 	}
 
 	void sendDeviceValues(AsyncWebServerRequest *request, WDevice *device) {
-		wlog->notice(F("Send all properties for device: "), device->getId());
+		wlog->notice(F("Send all properties for device: %s"), device->getId());
 		WStringStream* responseStreamWeb = new WStringStream(512);
 		WJson json(responseStreamWeb);
 		json.beginObject();
