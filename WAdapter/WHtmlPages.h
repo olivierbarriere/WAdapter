@@ -42,7 +42,7 @@ body{
 }
 #bodyDiv{  
 	display:inline-block;
-	min-width:300px;
+	min-width:350px;
 	text-align:left;
 }
 div{
@@ -59,7 +59,7 @@ input[type='text'],
 input[type='password'],
 select,
 button{
-	width: 300px;
+	width: 350px;
 }
 button{
 	border:0;
