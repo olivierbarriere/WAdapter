@@ -1153,7 +1153,7 @@ private:
 
 #ifndef MINIMAL
 				if (lastMqttHassAutodiscoverySent==0){
-						if (sendMqttHassAutodiscover(false) ) lastMqttHassAutodiscoverySent=now();
+						if (sendMqttHassAutodiscover(false) ) lastMqttHassAutodiscoverySent=millis();
 				}
 #endif
 				return true;
