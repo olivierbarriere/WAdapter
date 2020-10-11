@@ -566,8 +566,8 @@ public:
 		return this->mqttSendChangedValues;
 	}
 
-	void setSilentChange(void) {
-		this->silentChange=true;
+	void setSuppressOnChange(bool val=true) {
+		this->suppressOnChange=val;
 	}
 
 protected:
@@ -585,7 +585,7 @@ protected:
 		this->changed = true;
 		this->requested = false;
 		this->valueRequesting = false;
-		this->silentChange = false;
+		this->suppressOnChange = false;
 		this->notifying = false;
 		this->readOnly = false;
 		this->atType = nullptr;
@@ -654,15 +654,15 @@ private:
 	bool changed;
 	bool requested;
 	bool valueRequesting;
-	bool silentChange;
+	bool suppressOnChange;
 	bool notifying;
 
 	WConstStringProperty* firstEnum = nullptr;
 
 	void notify() {
-		if (!valueRequesting && !silentChange) {
+		if (!valueRequesting) {
 			notifying = true;
-			if (onChange) {
+			if (onChange  && !suppressOnChange) {
 				onChange(this);
 			}
 			if (deviceNotification) {
@@ -673,12 +673,12 @@ private:
 			}
 			notifying = false;
 		}
-		if (silentChange) silentChange=false;
+		if (suppressOnChange) suppressOnChange=false;
 	}
 
 
 	void afterSet() {
-		if (silentChange) silentChange=false;
+		if (suppressOnChange) suppressOnChange=false;
 	}
 
 

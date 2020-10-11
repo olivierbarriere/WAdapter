@@ -19,9 +19,9 @@ const static char HTTP_HEAD_BEGIN[]         PROGMEM = R"=====(<!DOCTYPE html>
 		<title>%s - %s</title>
 )=====";
 
-const static char HTTP_HEAD_STYLE[]              PROGMEM = "<link rel=\"stylesheet\" href=\"/css\" />";
+const static char HTTP_HEAD_STYLE[]              PROGMEM = "<link rel=\"stylesheet\" href=\"/css?%s\" />";
 
-const static char HTTP_HEAD_SCRIPT[]             PROGMEM = "<script src=\"/js\"></script>";
+const static char HTTP_HEAD_SCRIPT[]             PROGMEM = "<script src=\"/js?%s\"></script>";
 
 const static char HTTP_HEAD_END[]           PROGMEM = R"=====(
 	</head>

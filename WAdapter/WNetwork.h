@@ -70,6 +70,9 @@ const char* PARAM_BODY PROGMEM = "body";
 const char* HEADER_CT_ENCODING PROGMEM = "Content-Encoding";
 const char* HEADER_CT_ENCODING_GZ PROGMEM = "gzip";
 
+const char* HEADER_CACHECONTROL PROGMEM = "Cache-Control";
+const char* HEADER_CACHECONTROL_900 PROGMEM = "max-age=900";
+
 const char* DEFAULT_TOPIC_STATE PROGMEM = "properties";
 const char* DEFAULT_TOPIC_SET PROGMEM = "set";
 
@@ -796,6 +799,22 @@ true ||
 		return;
 	}
 
+	void replyStaticHeader(AsyncWebServerRequest *request, AsyncWebServerResponse *response, bool gzip){
+		if (gzip) response->addHeader(HEADER_CT_ENCODING, HEADER_CT_ENCODING_GZ);
+		response->addHeader(HEADER_CACHECONTROL, HEADER_CACHECONTROL_900);
+		request->send(response);
+
+	}
+
+	void replyStatic(AsyncWebServerRequest *request, const String &contentType, const uint8_t * content, size_t len, bool gzip=false){
+		AsyncWebServerResponse *response = request->beginResponse_P(200, contentType, content, len);
+		replyStaticHeader(request, response, gzip);
+	}
+	void replyStatic(AsyncWebServerRequest *request, const String &contentType, PGM_P content, bool gzip=false){
+		AsyncWebServerResponse *response = request->beginResponse_P(200, contentType, content);		
+		replyStaticHeader(request, response, gzip);
+	}
+
 	void handleOnRoot(AsyncWebServerRequest *request){
 		String url=request->url();
 		if (!checkAndLogWebAccess(request)) return;
@@ -821,14 +840,12 @@ true ||
 			} else if (url.equals(URI_FIRMWARE)){
 				handleHttpFirmwareUpdate(request);
 			} else if (url.equals(URI_CSS)){
-			request->send_P(200, CT_TEXT_CSS, PAGE_CSS);
+				replyStatic(request, CT_TEXT_CSS, PAGE_CSS);
 			} else if (url.equals(URI_JS)){
-				request->send_P(200, CT_TEXT_JS, PAGE_JS);
+				replyStatic(request, CT_TEXT_JS, PAGE_JS);
 #ifndef MINIMAL
 			} else if (url.equals(URI_FAVICON)){
-				AsyncWebServerResponse *response = request->beginResponse_P(200, CT_IMAGE_ICON, favicon_ico_gz, favicon_ico_gz_len);
-				response->addHeader(HEADER_CT_ENCODING, HEADER_CT_ENCODING_GZ);
-				request->send(response);
+				replyStatic(request, CT_IMAGE_ICON, favicon_ico_gz, favicon_ico_gz_len, true);
 #endif
 			} else if (url.startsWith(URI_THINGS)){
 				handleOnThings(request);
@@ -1454,8 +1471,8 @@ private:
 		if (!isWebServerRunning()) return nullptr;
 		page = request->beginResponseStream(CT_TEXT_HTML, 3096U);
 		page->printf_P(HTTP_HEAD_BEGIN, getIdx(), title);
-		page->print(FPSTR(HTTP_HEAD_SCRIPT));
-		page->print(FPSTR(HTTP_HEAD_STYLE));
+		page->printf_P(HTTP_HEAD_SCRIPT, getFirmwareVersion().c_str());
+		page->printf_P(HTTP_HEAD_STYLE, getFirmwareVersion().c_str());
 		if (HeaderAdditional!=nullptr) page->print(FPSTR(HeaderAdditional));
 		page->print(FPSTR(HTTP_HEAD_END));
 		return page;
