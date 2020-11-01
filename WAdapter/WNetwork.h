@@ -1275,9 +1275,9 @@ private:
 			printHttpCaption(page);
 			page->printf_P(HTTP_CONFIG_PAGE_BEGIN, ID_NETWORK);
 			page->printf_P(HTTP_PAGE_CONFIGURATION_STYLE, (this->isSupportingMqtt() ? F("block") : F("none")));
-			page->printf_P(HTTP_TEXT_FIELD, F("Hostname/Idx:"), "i", 16, getIdx());
-			page->printf_P(HTTP_TEXT_FIELD, F("Wifi ssid (only 2.4G):"), "s", 32, getSsid());
-			page->printf_P(HTTP_PASSWORD_FIELD, F("Wifi password:"), "p", "p", "p", 32, (strlen(getPassword()) ?  FORM_PW_NOCHANGE : ""));
+			page->printf_P(HTTP_TEXT_FIELD, F("Hostname:"), "i", 16, getIdx());
+			page->printf_P(HTTP_TEXT_FIELD, F("WiFi SSID (only 2.4G, name is case sensitive):"), "s", 32, getSsid());
+			page->printf_P(HTTP_PASSWORD_FIELD, F("WiFi password:"), "p", "p", "p", 32, (strlen(getPassword()) ?  FORM_PW_NOCHANGE : ""));
 			page->printf_P(HTTP_PAGE_CONFIGURATION_OPTION, "apfb", (this->isSupportingApFallback() ? HTTP_CHECKED : ""),
 			"", HTTP_PAGE_CONFIIGURATION_OPTION_APFALLBACK);
 			//mqtt
@@ -1288,7 +1288,7 @@ private:
 			page->printf_P(HTTP_TEXT_FIELD, F("MQTT Port:"), "mo", 4, getMqttPort());
 			page->printf_P(HTTP_TEXT_FIELD, F("MQTT User:"), "mu", 16, getMqttUser());
 			page->printf_P(HTTP_PASSWORD_FIELD, F("MQTT Password:"), "mp", "mp", "mp", 32, (strlen(getMqttPassword()) ?  FORM_PW_NOCHANGE : ""));
-			page->printf_P(HTTP_TEXT_FIELD, F("Topic, e.g.'home/room':"), "mt", 32, getMqttTopic());
+			page->printf_P(HTTP_TEXT_FIELD, F("Topic, e.g.'therm/room':"), "mt", 32, getMqttTopic());
 
 			page->printf_P(HTTP_PAGE_CONFIGURATION_OPTION, F("mqhass"), (this->isSupportingMqttHASS() ? HTTP_CHECKED : ""),
 				"", HTTP_PAGE_CONFIIGURATION_OPTION_MQTTHASS);
