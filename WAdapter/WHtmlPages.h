@@ -143,7 +143,7 @@ const static char HTTP_PAGE_CONFIGURATION_OPTION[]    PROGMEM = R"=====(
 const static char HTTP_PAGE_CONFIIGURATION_OPTION_MQTTHASS[] PROGMEM = "Support Autodiscovery for Home Assistant using MQTT<br>";
 const static char HTTP_PAGE_CONFIIGURATION_OPTION_MQTT[] PROGMEM = "Support MQTT";
 const static char HTTP_PAGE_CONFIIGURATION_OPTION_APFALLBACK[] PROGMEM = "Enable Fallback to AP-Mode if WiFi Connection gets lost";
-const static char HTTP_PAGE_CONFIIGURATION_OPTION_MQTTSINGLEVALUES[] PROGMEM = "Send all values also as single values via MQTT";
+const static char HTTP_PAGE_CONFIIGURATION_OPTION_MQTTSINGLEVALUES[] PROGMEM = "Send all properties also in separate MQTT messages";
 
 const static char HTTP_SAVED[]              PROGMEM = R"=====(
 <div>

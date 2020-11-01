@@ -997,6 +997,10 @@ private:
 	int lastWifiStatus;
 
 #ifndef MINIMAL
+	/*
+	 * called by WNetwork.h in notify() after wifi/mqtt connect
+	 * and in WNetwork.h loop() after stateNotifyInterval reached (per device)
+	 */
 	void handleDeviceStateChange(WDevice *device) {
 		String topic = String(getMqttTopic()) + "/" + MQTT_STAT + "/things/" + String(device->getId()) + "/properties";
 		wlog->notice(F("Device state changed -> send device state... %s"), topic.c_str());
@@ -1022,6 +1026,17 @@ private:
 					wlog->verbose(F("MQTT sent"));
 				}
 				device->lastStateNotify = millis();
+				// send single values
+				if (isSupportingMqttSingleValues() && device->isVisible(MQTT) and device->isMqttSendChangedValues()) {
+					WProperty* property = device->firstProperty;
+					while (property != nullptr) {
+						if (property->isVisible(MQTT) && !property->isNull()) {
+							// we set to Changed, then ne next loop() events the values will be sent out
+							property->setChanged();
+						}
+						property = property->next;
+					}
+				}
 			} else {
 				wlog->warning(F("Not sending state via MQTT %s, deviceStateComplete=false"), topic.c_str());
 			}
@@ -1692,6 +1707,10 @@ private:
 
 
 #ifndef MINIMAL
+	/* 
+	 * called every loop()
+	 */
+
 	void handleDevicesChangedPropertiesMQTT() {
 		if (!isMqttConnected()) return;
 		if (!isSupportingMqttSingleValues()) return;
@@ -1702,8 +1721,8 @@ private:
 				while (property != nullptr) {
 					if (property->isVisible(MQTT) && property->isChanged() && !property->isNull()) {
 						String stat_topic = String(getMqttTopic()) + String("/") + String(MQTT_STAT) + String("/things/") + String(device->getId()) + String("/properties/") + String(property->getId());
-						wlog->trace(F("sending changed property '%s' with value '%s' for device '%s' to topic '%s'"),
-							property->getId(), property->toString().c_str(), device->getId(), stat_topic.c_str());
+						//wlog->verbose(F("sending changed property '%s' with value '%s' for device '%s' to topic '%s'"),
+						//	property->getId(), property->toString().c_str(), device->getId(), stat_topic.c_str());
 						publishMqtt(stat_topic.c_str(), property->toString().c_str(), device->isMqttRetain());
 						property->setUnChanged();
 

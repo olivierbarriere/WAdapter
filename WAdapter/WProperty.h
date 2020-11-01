@@ -158,6 +158,10 @@ public:
 		this->changed = false;
 	}
 
+	void setChanged() {
+		this->changed = true;
+	}
+
 	virtual bool parse(String value) {
 		if ((!isReadOnly()) && (value != nullptr)) {
 			switch (getType()) {
