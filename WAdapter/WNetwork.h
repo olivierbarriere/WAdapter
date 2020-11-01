@@ -1838,7 +1838,7 @@ private:
 			wlog->notice(F("Serving: '%s' method %s to %s, maxFree: %d"), request->url().c_str(), request->methodToString(),
 			request->client()->remoteIP().toString().c_str(), ESP.getMaxFreeBlockSize());
 		}
-		if (ESP.getMaxFreeBlockSize()<(8*1024) && !request->url().equals(URI_RESET)){
+		if (ESP.getMaxFreeBlockSize()<(5*1024) && !request->url().equals(URI_RESET)){
 			//wlog->notice(F("Dropping Request with 503 Busy"));
 			request->send(503); // BUSY
 			return false;
