@@ -1290,7 +1290,7 @@ private:
 			printHttpCaption(page);
 			page->printf_P(HTTP_CONFIG_PAGE_BEGIN, ID_NETWORK);
 			page->printf_P(HTTP_PAGE_CONFIGURATION_STYLE, (this->isSupportingMqtt() ? F("block") : F("none")));
-			page->printf_P(HTTP_TEXT_FIELD, F("Hostname:"), "i", 16, getIdx());
+			page->printf_P(HTTP_TEXT_FIELD, F("Hostname:"), "i", 32, getIdx());
 			page->printf_P(HTTP_TEXT_FIELD, F("WiFi SSID (only 2.4G, name is case sensitive):"), "s", 32, getSsid());
 			page->printf_P(HTTP_PASSWORD_FIELD, F("WiFi password:"), "p", "p", "p", 32, (strlen(getPassword()) ?  FORM_PW_NOCHANGE : ""));
 			page->printf_P(HTTP_PAGE_CONFIGURATION_OPTION, "apfb", (this->isSupportingApFallback() ? HTTP_CHECKED : ""),
@@ -1629,7 +1629,7 @@ private:
 			} else {
 				// network settings is the same - but application differs. We need to fill settingsOld
 				wlog->notice(F("Reading NetworkSettings CURRENT"));
-				settingsOld->setString(PROP_IDX, 16, "");
+				settingsOld->setString(PROP_IDX, 32, "");
 				settingsOld->setString(PROP_SSID, 32, "");
 				settingsOld->setString(PROP_PASSWORD, 32, "");
 				settingsOld->setByte(PROP_NETBITS1, (NETBITS1_MQTT | NETBITS1_HASS));
@@ -1645,7 +1645,7 @@ private:
 		}
 
 		
-		this->idx = settings->setString(PROP_IDX, 16,
+		this->idx = settings->setString(PROP_IDX, 32,
 			(settingsOld && settingsOld->existsSetting(PROP_IDX) ? settingsOld->getString(PROP_IDX) : this->getClientName(true).c_str()));
 		this->ssid = settings->setString(PROP_SSID, 32, (settingsOld && settingsOld->existsSetting(PROP_SSID) ? settingsOld->getString(PROP_SSID) : ""));
 		settings->setString(PROP_PASSWORD, 32, (settingsOld && settingsOld->existsSetting(PROP_PASSWORD) ? settingsOld->getString(PROP_PASSWORD) : ""));
